@@ -1,5 +1,6 @@
 """
 Uvicorn entry point for the Voice AI backend.
+Version: 1.1.0
 """
 
 import os
