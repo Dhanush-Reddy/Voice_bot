@@ -24,6 +24,8 @@ services:
         sync: false  # You'll paste the JSON content here
       - key: AGENT_POOL_SIZE
         value: "3"
+      - key: BOT_VOICE
+        value: Aoede  # Options: Aoede (Female), Kore (Female), Puck (Male), Charon (Male)
       - key: PORT
         value: "8000"
     healthCheckPath: /api/health

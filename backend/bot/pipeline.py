@@ -112,6 +112,8 @@ async def _create_gemini_service_with_retry() -> GeminiLiveVertexLLMService:
             creds_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
             creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
             
+            voice_id = os.getenv("BOT_VOICE", "Aoede")
+            
             service = GeminiLiveVertexLLMService(
                 project_id=os.getenv("GOOGLE_CLOUD_PROJECT"),
                 location=os.getenv("GOOGLE_CLOUD_LOCATION"),
@@ -119,7 +121,7 @@ async def _create_gemini_service_with_retry() -> GeminiLiveVertexLLMService:
                 credentials_path=creds_path if not creds_json else None,
                 model="google/gemini-live-2.5-flash-native-audio",
                 system_instruction=SYSTEM_PROMPT,
-                voice_id="Puck",
+                voice_id=voice_id,
                 params=InputParams(
                     response_modalities=[Modality.AUDIO, Modality.TEXT],
                 ),
