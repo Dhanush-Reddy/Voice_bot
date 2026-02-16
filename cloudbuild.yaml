@@ -1,0 +1,41 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/voice-backend', '-f', 'backend/Dockerfile.backend', './backend']
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/voice-backend']
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'voice-backend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/voice-backend'
+      - '--region'
+      - 'europe-west1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--min-instances'
+      - '1'
+      - '--cpu'
+      - '2'
+      - '--memory'
+      - '4Gi'
+      - '--no-cpu-throttling'
+      - '--set-env-vars'
+      - 'LIVEKIT_URL=${_LIVEKIT_URL},LIVEKIT_API_KEY=${_LIVEKIT_API_KEY},LIVEKIT_API_SECRET=${_LIVEKIT_API_SECRET},GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=europe-west1,GOOGLE_APPLICATION_CREDENTIALS_JSON=${_GOOGLE_APPLICATION_CREDENTIALS_JSON}'
+
+images:
+  - 'gcr.io/$PROJECT_ID/voice-backend'
+
+substitutions:
+  _LIVEKIT_URL: 'wss://voice-agent-xxxx.livekit.cloud'
+  _LIVEKIT_API_KEY: 'APIxxxx'
+  _LIVEKIT_API_SECRET: 'SGxxxx'
+  _GOOGLE_APPLICATION_CREDENTIALS_JSON: '{}'
