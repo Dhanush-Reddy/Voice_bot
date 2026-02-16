@@ -108,10 +108,15 @@ async def _create_gemini_service_with_retry() -> GeminiLiveVertexLLMService:
         try:
             logger.info(f"🧠 Gemini connection attempt {attempt}/{MAX_RETRY_ATTEMPTS}...")
             
+            # Support both file path and raw JSON string for easier cloud deployment
+            creds_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+            creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            
             service = GeminiLiveVertexLLMService(
                 project_id=os.getenv("GOOGLE_CLOUD_PROJECT"),
                 location=os.getenv("GOOGLE_CLOUD_LOCATION"),
-                credentials_path=os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+                credentials=creds_json,
+                credentials_path=creds_path if not creds_json else None,
                 model="google/gemini-live-2.5-flash-native-audio",
                 system_instruction=SYSTEM_PROMPT,
                 voice_id="Puck",

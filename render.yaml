@@ -20,16 +20,12 @@ services:
         sync: false
       - key: GOOGLE_CLOUD_LOCATION
         value: us-central1
-      - key: GOOGLE_APPLICATION_CREDENTIALS
-        value: /app/credentials/google-credentials.json
+      - key: GOOGLE_APPLICATION_CREDENTIALS_JSON
+        sync: false  # You'll paste the JSON content here
       - key: AGENT_POOL_SIZE
         value: "3"
       - key: PORT
         value: "8000"
-    disk:
-      name: credentials
-      mountPath: /app/credentials
-      sizeGB: 1
     healthCheckPath: /api/health
     buildFilter:
       paths:
