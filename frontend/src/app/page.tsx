@@ -3,10 +3,9 @@
 import { useState, useCallback, useEffect } from "react";
 import VoiceAssistant from "@/components/VoiceAssistant";
 
-const BACKEND_URL =
-    process.env.NODE_ENV === "production"
-        ? ""
-        : process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+// NOTE: Using "" will use Netlify proxy /api/token. 
+// Using absolute URL (e.g. Cloud Run) is faster.
 
 export default function Home() {
     const [connectionState, setConnectionState] = useState<
