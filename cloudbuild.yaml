@@ -39,3 +39,6 @@ substitutions:
   _LIVEKIT_API_KEY: 'APIxxxx'
   _LIVEKIT_API_SECRET: 'SGxxxx'
   _GOOGLE_APPLICATION_CREDENTIALS_JSON: '{}'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
