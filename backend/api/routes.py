@@ -92,4 +92,22 @@ async def pool_status():
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "pool": agent_pool.status}
+    config_ok = all([
+        os.getenv("LIVEKIT_URL"),
+        os.getenv("LIVEKIT_API_KEY"),
+        os.getenv("LIVEKIT_API_SECRET"),
+        os.getenv("GOOGLE_CLOUD_PROJECT"),
+        os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    ])
+    return {
+        "status": "ok",
+        "config_ok": config_ok,
+        "pool": agent_pool.status,
+        "env_check": {
+            "has_lk_url": bool(os.getenv("LIVEKIT_URL")),
+            "has_lk_key": bool(os.getenv("LIVEKIT_API_KEY")),
+            "has_lk_secret": bool(os.getenv("LIVEKIT_API_SECRET")),
+            "has_gcp_project": bool(os.getenv("GOOGLE_CLOUD_PROJECT")),
+            "has_gcp_creds": bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+        }
+    }
