@@ -4,7 +4,9 @@ import { useState, useCallback } from "react";
 import VoiceAssistant from "@/components/VoiceAssistant";
 
 const BACKEND_URL =
-    process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+    process.env.NODE_ENV === "production"
+        ? ""
+        : process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 export default function Home() {
     const [connectionState, setConnectionState] = useState<
