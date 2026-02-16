@@ -18,59 +18,23 @@ Deploy your Voice AI application with **Netlify** (Frontend) + **Render** (Backe
 
 #### Option A: Using Render Blueprint (Recommended)
 
-1. **Push your code to GitHub**
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit"
-   git remote add origin https://github.com/YOUR_USERNAME/voice-ai.git
-   git push -u origin main
-   ```
+1. **Go to Render Dashboard**: https://dashboard.render.com
 
-2. **Go to Render Dashboard**: https://dashboard.render.com
+2. **Click "New" → "Blueprint"**
 
-3. **Click "New" → "Blueprint"**
+3. **Connect your GitHub repo** (`Voice_bot`)
 
-4. **Connect your GitHub repo**
+4. **Render will automatically detect `render.yaml`** and show you the configuration.
 
-5. **Render will automatically detect `render.yaml`** and configure the service
+5. **Fill in the Environment Variables** when prompted:
+   - `LIVEKIT_URL`: `wss://your-project.livekit.cloud`
+   - `LIVEKIT_API_KEY`: your key
+   - `LIVEKIT_API_SECRET`: your secret
+   - `GOOGLE_CLOUD_PROJECT`: `gen-lang-client-0133143947`
+   - `GOOGLE_APPLICATION_CREDENTIALS_JSON`: (Paste the entire content of your service account JSON file here)
+   - `GOOGLE_CLOUD_LOCATION`: `us-central1`
 
-6. **Add Environment Variables** in Render Dashboard:
-   ```
-   LIVEKIT_URL=wss://your-project.livekit.cloud
-   LIVEKIT_API_KEY=your_livekit_api_key
-   LIVEKIT_API_SECRET=your_livekit_api_secret
-   GOOGLE_CLOUD_PROJECT=your-gcp-project-id
-   GOOGLE_CLOUD_LOCATION=us-central1
-   ```
-
-7. **Upload Google Credentials**:
-   - Go to Render Dashboard → Your Service → Disks
-   - SSH into the disk or use Render's shell
-   - Create `/app/credentials/google-credentials.json` with your service account JSON
-
-8. **Click "Deploy"**
-
-#### Option B: Manual Deploy
-
-1. **Go to Render Dashboard** → "New" → "Web Service"
-
-2. **Connect your GitHub repo**
-
-3. **Configure**:
-   - **Name**: `voice-ai-backend`
-   - **Environment**: `Docker`
-   - **Dockerfile Path**: `backend/Dockerfile.backend`
-   - **Plan**: Standard ($7/month) or Free (limited)
-
-4. **Add Environment Variables** (same as above)
-
-5. **Add Disk**:
-   - Name: `credentials`
-   - Mount Path: `/app/credentials`
-   - Size: 1 GB
-
-6. **Deploy**
+6. **Click "Deploy"**
 
 ---
 
