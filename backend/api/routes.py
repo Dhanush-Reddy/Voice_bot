@@ -50,34 +50,38 @@ async def generate_token(
     Pop a pre-warmed agent from the pool and return a token for the user
     to join its room. The bot is already connected — zero delay.
     """
-    if not LIVEKIT_URL:
-        raise HTTPException(
-            status_code=500,
-            detail="LiveKit environment variables are not configured.",
+    try:
+        if not LIVEKIT_URL:
+            raise HTTPException(
+                status_code=500,
+                detail="LiveKit environment variables are not configured.",
+            )
+
+        # Pop a ready agent (instant if pool has capacity)
+        agent = await agent_pool.pop()
+        if agent is None:
+            raise HTTPException(
+                status_code=503,
+                detail="No agents available. Please try again in a moment.",
+            )
+
+        # Generate a token for the user to join the agent's pre-warmed room
+        token = agent_pool.generate_user_token(agent.room_name, participant_name)
+
+        logger.info(
+            "🎫 Token issued for room %s (participant=%s)",
+            agent.room_name,
+            participant_name,
         )
 
-    # Pop a ready agent (instant if pool has capacity)
-    agent = await agent_pool.pop()
-    if agent is None:
-        raise HTTPException(
-            status_code=503,
-            detail="No agents available. Please try again in a moment.",
-        )
-
-    # Generate a token for the user to join the agent's pre-warmed room
-    token = agent_pool.generate_user_token(agent.room_name, participant_name)
-
-    logger.info(
-        "🎫 Token issued for room %s (participant=%s)",
-        agent.room_name,
-        participant_name,
-    )
-
-    return {
-        "token": token,
-        "url": LIVEKIT_URL,
-        "room_name": agent.room_name,
-    }
+        return {
+            "token": token,
+            "url": LIVEKIT_URL,
+            "room_name": agent.room_name,
+        }
+    except Exception as e:
+        logger.error(f"❌ Error generating token: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/pool/status")
