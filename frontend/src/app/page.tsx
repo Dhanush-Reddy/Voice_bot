@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import VoiceAssistant from "@/components/VoiceAssistant";
 
 const BACKEND_URL =
@@ -16,31 +16,34 @@ export default function Home() {
     const [livekitUrl, setLivekitUrl] = useState<string>("");
     const [error, setError] = useState<string>("");
 
-    const handleConnect = useCallback(async () => {
-        setConnectionState("connecting");
-        setError("");
-
-        try {
-            const res = await fetch(
-                `${BACKEND_URL}/api/token?participant_name=User`
-            );
-            if (!res.ok) {
-                throw new Error(`Failed to get token: ${res.statusText}`);
+    // PRE-FETCH TOKEN & CONNECT ON MOUNT (Instant-On Optimization)
+    useEffect(() => {
+        const prefetch = async () => {
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/token?participant_name=User`);
+                if (!res.ok) throw new Error("Pre-fetch failed");
+                const data = await res.json();
+                setToken(data.token);
+                setLivekitUrl(data.url);
+                console.log("⚡ [PRO] Session pre-warmed & ready for instant connect");
+            } catch (err) {
+                console.error("Failed to pre-warm session:", err);
             }
-            const data = await res.json();
-            setToken(data.token);
-            setLivekitUrl(data.url);
-            setConnectionState("connected");
-        } catch (err: any) {
-            setError(err.message || "Failed to connect");
-            setConnectionState("idle");
-        }
+        };
+        prefetch();
+    }, []);
+
+    const handleConnect = useCallback(async () => {
+        setConnectionState("connected");
+        console.log("🚀 [PRO] Instant connect triggered");
     }, []);
 
     const handleDisconnect = useCallback(() => {
         setToken("");
         setLivekitUrl("");
         setConnectionState("idle");
+        // Optionally reload to get a new pre-warmed session
+        window.location.reload();
     }, []);
 
     return (

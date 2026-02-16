@@ -32,7 +32,7 @@ LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
 MAX_RETRY_ATTEMPTS = 3
 RETRY_DELAY = 2.0  # seconds
 GEMINI_TIMEOUT = 30.0  # seconds
-STARTUP_GRACE_PERIOD = 0.1  # optimized for sub-300ms response
+STARTUP_GRACE_PERIOD = 0.0  # Zero delay for instant response
 
 # ---------------------------------------------------------------------------
 # System Prompt — Trilingual (English/Hindi/Telugu)
