@@ -5,9 +5,12 @@ services:
       dockerfile: Dockerfile.backend
     ports:
       - "8000:8000"
+    init: true
     env_file:
       - .env
     restart: unless-stopped
+    volumes:
+      - ./gen-lang-client-0133143947-ae5077e2b811.json:/app/credentials.json:ro
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" ]
       interval: 30s

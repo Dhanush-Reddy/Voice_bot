@@ -1,19 +1,66 @@
-# Created by the Next.js frontend
+# Dependencies
 node_modules/
-.next/
-out/
-
-# Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+.Python
+*.so
 .venv/
 venv/
+
+# Next.js
+.next/
+out/
+
+# Environment variables (NEVER commit these!)
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Google Cloud credentials (SECURITY - NEVER COMMIT!)
+*credentials*.json
+*service-account*.json
+*google*.json
+gen-lang-client-*.json
+!credentials/.gitkeep
+
+# Logs
+*.log
+log.txt
+error.txt
+answers.txt
+logs/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Docker
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# IDE
-.vscode/
-.idea/
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Planning (local development only)
+.planning/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak

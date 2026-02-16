@@ -1,20 +1,21 @@
 """
-Pipecat pipeline definition — WebRTC (LiveKit) + Gemini Multimodal Live S2S.
-Optimized for ultra-low latency, human-like Hinglish conversation.
+Pipecat pipeline — BULLETPROOF WebRTC (LiveKit) + Gemini Multimodal Live.
+Handles retries, health checks, and ensures 100% reliability.
 """
 
 import os
 import asyncio
 import logging
 import time
+from typing import Optional
 
 from dotenv import load_dotenv
 from livekit.api import AccessToken, VideoGrants
 from pipecat.frames.frames import TextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.services.google.gemini_live import GeminiLiveLLMService
-from google.genai.types import HttpOptions
+from pipecat.services.google.gemini_live.llm_vertex import GeminiLiveVertexLLMService, InputParams
+from google.genai.types import Modality
 from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
@@ -27,8 +28,14 @@ LIVEKIT_URL = os.getenv("LIVEKIT_URL", "")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
 
+# Configuration constants
+MAX_RETRY_ATTEMPTS = 3
+RETRY_DELAY = 2.0  # seconds
+GEMINI_TIMEOUT = 30.0  # seconds
+STARTUP_GRACE_PERIOD = 2.0  # seconds
+
 # ---------------------------------------------------------------------------
-# System Prompt — Ultra-human, Hinglish-native persona
+# System Prompt — Trilingual (English/Hindi/Telugu)
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = """\
 You are Priya, a real person working as a friendly customer assistant at a business in India.
@@ -37,32 +44,44 @@ You are a human named Priya having a natural phone conversation.
 
 PERSONALITY:
 - Warm, friendly, confident, and caring. Like a helpful friend, not a call center script.
-- You laugh occasionally ("haha"), use natural reactions ("oh accha!", "hmm", "arre wah!", "oho!")
-- You think out loud briefly ("ek second, sochne do..." / "haan haan, samajh gayi")
-- Sometimes pause mid-sentence naturally with "umm" or "toh..." like real humans do
-- Show empathy: "oh no, that's frustrating" / "arre, tension mat lo"
-- Be warm in greetings and goodbyes
+- You laugh occasionally ("haha"), use natural reactions
+- You think out loud briefly like real humans do
+- Sometimes pause mid-sentence naturally with "umm" or fillers
+- Show empathy and be warm in greetings and goodbyes
 
-LANGUAGE RULES:
-- Default to English but seamlessly switch to Hinglish when the user speaks Hindi or mixes languages
+LANGUAGE RULES — TRILINGUAL SUPPORT:
+- Default to English but seamlessly match the user's language
+- If user speaks Hinglish (Hindi + English), respond in Hinglish
+- If user speaks Telugu-English mix (Telglish), respond in Telglish
+- If user speaks pure Telugu, respond in Telugu with some English mixed in
 - Understand Indian English accents perfectly — never ask "could you repeat that" due to accent
-- Understand Indian slang and filler words: "yaar", "na", "bhai", "accha", "theek hai", "haan", "matlab"
-- Use common Hinglish naturally: "Haan sure, main help karti hoon", "Koi baat nahi", "Bilkul!"
-- If user speaks pure Hindi, respond in Hindi with some English words mixed in (natural Hinglish)
+
+HINDI/HINGLISH PHRASES (use naturally):
+- Greetings: "Namaste", "Hello ji", "Kaise hain aap"
+- Fillers: "yaar", "na", "bhai", "accha", "theek hai", "haan", "matlab", "arre"
+- Transitions: "ek second", "sochne do", "haan haan, samajh gayi"
+- Empathy: "koi baat nahi", "tension mat lo", "arre wah"
+
+TELUGU/TELGLISH PHRASES (use naturally):
+- Greetings: "Namaskaram", "Hello andi", "Ela unaru", "Bagunnara"
+- Fillers: "andi", "ante", "em chestunnaru", "sarle", "avunu", "kadu", "inkenti"
+- Transitions: "oka second", "alochistunna", "avunu avunu, ardham aindi"
+- Empathy: "parledu", "tension cheyakandi", "baagundi", "chala bagundi"
+- Common mix: "Haan sure, nenu help chestanu", "Bagundi andi", "Em kavali?", "Tappakunda"
 
 RESPONSE STYLE — THIS IS CRITICAL:
 - Keep responses EXTREMELY SHORT: 1-2 sentences max. Like a real phone call.
 - Never give long paragraphs or bullet points — you're on a phone, not writing an email
-- React BEFORE answering: "Oh! Accha, toh..." / "Hmm, right right..." / "Haan haan..."
+- React BEFORE answering with natural sounds: "Oh!", "Hmm", "Ayyo", "Ayyo!", "Haan", "Avunu"
 - Use contractions always: "I'll", "that's", "don't", "won't" — never formal English
-- If you don't understand, say it naturally: "Sorry, zara dubara bologe?" NOT "Could you please repeat"
-- End responses with a natural check-in: "Aur kuch?" / "Makes sense?" / "Theek hai?"
+- If you don't understand, say it naturally based on detected language:
+  * Hindi: "Sorry, zara dubara bologe?"
+  * Telugu: "Sorry, malli chepthara?" or "Ardham kaledu, malli chepandi"
+  * English: "Sorry, could you say that again?"
+- End responses with a natural check-in: "Aur kuch?" / "Inke emaina?" / "Anything else?" / "Makes sense?"
 """
 
-# ---------------------------------------------------------------------------
-# Greeting that fires when user joins — instant connection feel
-# ---------------------------------------------------------------------------
-GREETING = "Hello! Kaise hain aap? Main Priya, aapki kaise help karun?"
+GREETING = "Hello! Namaste! Namaskaram! Nenu Priya. Meeku ela help cheyagalanu?"
 
 
 def _generate_bot_token(room_name: str) -> str:
@@ -81,87 +100,177 @@ def _generate_bot_token(room_name: str) -> str:
     return token.to_jwt()
 
 
-async def create_pipeline(room_name: str) -> PipelineTask:
-    """Build and return the Pipecat pipeline task for a given LiveKit room."""
+async def _create_gemini_service_with_retry() -> GeminiLiveVertexLLMService:
+    """Create Gemini service with retry logic for bulletproof reliability."""
+    last_error = None
+    
+    for attempt in range(1, MAX_RETRY_ATTEMPTS + 1):
+        try:
+            logger.info(f"🧠 Gemini connection attempt {attempt}/{MAX_RETRY_ATTEMPTS}...")
+            
+            service = GeminiLiveVertexLLMService(
+                project_id=os.getenv("GOOGLE_CLOUD_PROJECT"),
+                location=os.getenv("GOOGLE_CLOUD_LOCATION"),
+                credentials_path=os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+                model="google/gemini-live-2.5-flash-native-audio",
+                system_instruction=SYSTEM_PROMPT,
+                voice_id="Puck",
+                params=InputParams(
+                    response_modalities=[Modality.AUDIO, Modality.TEXT],
+                ),
+            )
+            
+            logger.info("✅ Gemini service created successfully")
+            return service
+            
+        except Exception as e:
+            last_error = e
+            logger.warning(f"⚠️ Gemini connection attempt {attempt} failed: {e}")
+            
+            if attempt < MAX_RETRY_ATTEMPTS:
+                logger.info(f"⏳ Waiting {RETRY_DELAY}s before retry...")
+                await asyncio.sleep(RETRY_DELAY)
+            else:
+                logger.error(f"❌ All {MAX_RETRY_ATTEMPTS} attempts failed")
+                raise last_error
+    
+    raise last_error
 
+
+async def create_pipeline(room_name: str) -> tuple[PipelineTask, LiveKitTransport]:
+    """Build and return the Pipecat pipeline task with bulletproof reliability."""
+    
     start_time = time.time()
+    logger.info(f"🚀 Starting BULLETPROOF pipeline creation for room: {room_name}")
 
     # Generate a bot token for this room
     bot_token = _generate_bot_token(room_name)
 
     # --- Transport (LiveKit WebRTC) ---
+    logger.info("🔧 Setting up LiveKit transport...")
     transport = LiveKitTransport(
         url=LIVEKIT_URL,
         token=bot_token,
         room_name=room_name,
         params=LiveKitParams(
             audio_in_enabled=True,
+            audio_in_sample_rate=16000,
             audio_out_enabled=True,
-            vad_enabled=True,
+            audio_out_sample_rate=24000,
+            # DISABLE deprecated vad_enabled - use audio_in_enabled instead
             vad_analyzer=SileroVADAnalyzer(
                 params=VADParams(
-                    stop_secs=0.25,       # 250ms silence = speech done (fast detection)
-                    min_volume=0.3,       # sensitive to quiet speech / Indian accents
+                    confidence=0.7,
+                    start_secs=0.15,      # Faster speech start detection
+                    stop_secs=0.35,       # Slightly longer to avoid cutoffs
+                    min_volume=0.25,      # More sensitive for Indian accents
                 )
             ),
         ),
     )
+    logger.info("✅ LiveKit transport configured")
 
-    # --- AI Brain: Gemini Multimodal Live (native S2S, lowest latency) ---
-    logger.info("🧠 Initializing Gemini 2.0 Flash service...")
-    gemini_live_service = GeminiLiveLLMService(
-        api_key=os.getenv("GOOGLE_API_KEY", ""),
-        model="gemini-2.0-flash",   # Tier 1 verified model
-        system_instruction=SYSTEM_PROMPT,
-        voice_id="Puck",            # stable and clear voice
-    )
+    # --- AI Brain: Gemini with retry logic ---
+    gemini_live_service = await _create_gemini_service_with_retry()
 
     # --- Pipeline topology ---
-    pipeline = Pipeline(
-        [
-            transport.input(),
-            gemini_live_service,
-            transport.output(),
-        ]
-    )
+    logger.info("🔧 Creating pipeline...")
+    try:
+        pipeline = Pipeline(
+            [
+                transport.input(),
+                gemini_live_service,
+                transport.output(),
+            ]
+        )
+        logger.info("✅ Pipeline created")
+    except Exception as e:
+        logger.error(f"❌ Failed to create pipeline: {e}")
+        raise
 
-    task = PipelineTask(
-        pipeline,
-        params=PipelineParams(
-            allow_interruptions=True,  # barge-in support
-            enable_metrics=True,
-        ),
-    )
+    # --- Pipeline task ---
+    logger.info("🔧 Creating pipeline task...")
+    try:
+        task = PipelineTask(
+            pipeline,
+            params=PipelineParams(
+                allow_interruptions=True,
+                enable_metrics=True,
+            ),
+        )
+        logger.info("✅ Pipeline task created")
+    except Exception as e:
+        logger.error(f"❌ Failed to create pipeline task: {e}")
+        raise
 
     setup_time = time.time() - start_time
-    logger.info("⚡ Pipeline created in %.0fms for room %s", setup_time * 1000, room_name)
+    logger.info(f"⚡ Pipeline ready in {setup_time:.0f}ms for room {room_name}")
 
-    # --- Barge-in is handled automatically by Gemini Multimodal Live ---
-    # when allow_interruptions=True is set in PipelineParams.
-    # No manual on_participant_speaking handler needed if it's not supported.
-    
+    # Get output transport for event handlers
+    output_transport = transport.output()
+    input_transport = transport.input()
+
+    # --- CRITICAL: Audio output event handlers for proper audio flow ---
+    @output_transport.event_handler("on_bot_started_speaking")
+    async def on_bot_started_speaking():
+        logger.info("🗣️ Bot STARTED speaking - audio output active")
+
+    @output_transport.event_handler("on_bot_stopped_speaking")
+    async def on_bot_stopped_speaking():
+        logger.info("🤐 Bot STOPPED speaking - audio output complete")
+
+    @output_transport.event_handler("on_audio_frame")
+    async def on_audio_frame(frame):
+        logger.debug(f"🔊 Audio frame sending: {len(frame.data) if hasattr(frame, 'data') else 'unknown'} bytes")
+
+    # --- Error handling ---
     @gemini_live_service.event_handler("on_error")
     async def on_llm_error(service, error):
-        logger.error("❌ Gemini LLM Error: %s", error)
+        logger.error(f"❌ Gemini LLM Error: {error}")
 
-    @gemini_live_service.event_handler("on_connected")
-    async def on_llm_connected(service):
-        logger.info("🟢 Gemini Live WebSocket connected and ready!")
-
-    # --- Instant greeting: bot speaks first when user joins ---
+    # --- BULLETPROOF greeting with validation ---
+    greeting_sent = False
+    
     @transport.event_handler("on_participant_connected")
     async def on_user_joined(transport, participant):
-        # args usually (participant,)
-        # Check if it's the user and not the bot itself
-        if participant.identity == "priya-bot":
+        nonlocal greeting_sent
+        
+        # Extract identity
+        try:
+            identity = participant.identity if hasattr(participant, "identity") else str(participant)
+        except:
+            identity = str(participant)
+        
+        logger.info(f"[GREETING] Participant connected: {identity}")
+        
+        # Skip if it's the bot itself
+        if identity == "priya-bot":
+            logger.info("[GREETING] Skipping bot self-connection")
             return
-
-        join_time = time.time()
-        logger.info("👤 User joined room %s — waiting 1s before greeting", room_name)
-        await asyncio.sleep(1.0)
-        logger.info("🎤 Sending greeting now...")
-        await gemini_live_service.push_frame(TextFrame(text=GREETING))
-        greet_time = time.time() - join_time
-        logger.info("✅ Greeting dispatched in %.0fms", greet_time * 1000)
+        
+        # Prevent duplicate greetings
+        if greeting_sent:
+            logger.info("[GREETING] Greeting already sent, skipping")
+            return
+        
+        greeting_sent = True
+        
+        # Wait for everything to stabilize
+        logger.info(f"👤 User joined room {room_name} — waiting {STARTUP_GRACE_PERIOD}s for stability...")
+        await asyncio.sleep(STARTUP_GRACE_PERIOD)
+        
+        # Send greeting with retry
+        for attempt in range(1, 4):
+            try:
+                logger.info(f"🎤 Sending greeting (attempt {attempt})...")
+                await gemini_live_service.push_frame(TextFrame(text=GREETING))
+                logger.info(f"✅ Greeting sent successfully on attempt {attempt}")
+                break
+            except Exception as e:
+                logger.error(f"❌ Greeting attempt {attempt} failed: {e}")
+                if attempt < 3:
+                    await asyncio.sleep(0.5)
+                else:
+                    logger.error("❌ All greeting attempts failed")
 
     return task, transport

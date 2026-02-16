@@ -1,0 +1,38 @@
+# Render.com Blueprint for Backend
+# This file configures your backend deployment on Render
+
+services:
+  # Web Service for the Python Backend
+  - type: web
+    name: voice-ai-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile.backend
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: LIVEKIT_URL
+        sync: false  # You'll set this in Render dashboard
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: GOOGLE_CLOUD_PROJECT
+        sync: false
+      - key: GOOGLE_CLOUD_LOCATION
+        value: us-central1
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /app/credentials/google-credentials.json
+      - key: AGENT_POOL_SIZE
+        value: "3"
+      - key: PORT
+        value: "8000"
+    disk:
+      name: credentials
+      mountPath: /app/credentials
+      sizeGB: 1
+    healthCheckPath: /api/health
+    buildFilter:
+      paths:
+        - backend/**/**
+    region: oregon  # Choose region closest to your users
+    plan: standard  # Start with standard (can upgrade later)

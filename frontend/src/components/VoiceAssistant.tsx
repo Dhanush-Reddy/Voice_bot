@@ -6,9 +6,10 @@ import {
     useRoomContext,
     useParticipants,
     useConnectionState,
+    RoomAudioRenderer,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
-import { ConnectionState, RoomEvent, Participant } from "livekit-client";
+import { ConnectionState, RoomEvent, Participant, Track } from "livekit-client";
 
 interface VoiceAssistantProps {
     token: string;
@@ -43,10 +44,11 @@ function ActiveRoom({ onDisconnect }: { onDisconnect: () => void }) {
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [statusText, setStatusText] = useState("Connecting…");
 
-    // Track whether the AI participant is speaking
+    // Track bot speaking state
     useEffect(() => {
         if (!room) return;
 
+        // Handle active speakers
         const handleActiveSpeakers = () => {
             const activeSpeakers = room.activeSpeakers;
             const botSpeaking = activeSpeakers.some(
@@ -56,6 +58,7 @@ function ActiveRoom({ onDisconnect }: { onDisconnect: () => void }) {
         };
 
         room.on(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakers);
+        
         return () => {
             room.off(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakers);
         };
@@ -93,8 +96,25 @@ function ActiveRoom({ onDisconnect }: { onDisconnect: () => void }) {
         onDisconnect();
     }, [room, onDisconnect]);
 
+    // Enable audio on user interaction (required by browser autoplay policy)
+    const enableAudio = useCallback(() => {
+        if (room) {
+            room.startAudio();
+            console.log('[Audio] Audio enabled by user interaction');
+        }
+    }, [room]);
+
     return (
-        <div className="glass-card p-12 flex flex-col items-center gap-8 max-w-md w-full text-center">
+        <div 
+            className="glass-card p-12 flex flex-col items-center gap-8 max-w-md w-full text-center"
+            onClick={enableAudio}
+        >
+            {/* Room audio renderer for all remote audio */}
+            <RoomAudioRenderer />
+            
+            {/* Click to enable audio hint */}
+            <p className="text-xs text-slate-500">Click anywhere to enable audio</p>
+            
             {/* AI Orb Visualizer */}
             <div className="relative flex items-center justify-center">
                 <div className={`ai-orb ${isSpeaking ? "speaking" : "idle"}`} />
