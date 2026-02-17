@@ -124,7 +124,7 @@ async def _create_gemini_service_with_retry() -> GeminiLiveVertexLLMService:
                 location=location,
                 credentials=creds_json,
                 credentials_path=creds_path if not creds_json else None,
-                model="google/gemini-2.0-flash-exp",
+                model="gemini-2.0-flash-exp",
                 system_instruction=SYSTEM_PROMPT,
                 voice_id=voice_id,
                 params=InputParams(
