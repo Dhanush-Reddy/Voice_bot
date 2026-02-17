@@ -17,9 +17,9 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-LIVEKIT_URL = os.getenv("LIVEKIT_URL", "")
-LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
-LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
+LIVEKIT_URL = os.getenv("LIVEKIT_URL", "").strip()
+LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "").strip()
+LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "").strip()
 POOL_SIZE = int(os.getenv("AGENT_POOL_SIZE", "3"))
 
 # Health check constants

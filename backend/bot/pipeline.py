@@ -24,9 +24,13 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-LIVEKIT_URL = os.getenv("LIVEKIT_URL", "")
-LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
-LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
+LIVEKIT_URL = os.getenv("LIVEKIT_URL", "").strip()
+LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "").strip()
+LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "").strip()
+
+# Diagnostic log (safe for production)
+if LIVEKIT_URL:
+    logger.info(f"📡 LiveKit Config: URL_len={len(LIVEKIT_URL)}, Key_len={len(LIVEKIT_API_KEY)}, Secret_len={len(LIVEKIT_API_SECRET)}")
 
 # Configuration constants
 MAX_RETRY_ATTEMPTS = 3

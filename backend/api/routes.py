@@ -101,7 +101,7 @@ async def health():
     ])
     return {
         "status": "ok",
-        "deploy_time": "2026-02-17T04:30:00Z (v1.1.15-ROOMS)",
+        "deploy_time": "2026-02-17T04:45:00Z (v1.1.16-SANITY)",
         "config_ok": config_ok,
         "pool": agent_pool.status,
         "env_check": {
