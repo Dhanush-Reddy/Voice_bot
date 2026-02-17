@@ -113,14 +113,15 @@ async def _create_gemini_service_with_retry() -> GeminiLiveVertexLLMService:
                 creds_path = None
             
             # Diagnostic details (safe for production)
-            logger.info(f"🧠 Service: location={os.getenv('GOOGLE_CLOUD_LOCATION')}, project={os.getenv('GOOGLE_CLOUD_PROJECT')}, voice={os.getenv('BOT_VOICE', 'Aoede')}")
+            location = os.getenv("GOOGLE_CLOUD_LOCATION") or "us-central1"
+            logger.info(f"🧠 Service: location={location}, project={os.getenv('GOOGLE_CLOUD_PROJECT')}, voice={os.getenv('BOT_VOICE', 'Aoede')}")
             logger.info(f"🧠 Service: has_creds_json={bool(creds_json)}, has_creds_path={bool(creds_path)}")
             
             voice_id = os.getenv("BOT_VOICE", "Aoede")
             
             service = GeminiLiveVertexLLMService(
                 project_id=os.getenv("GOOGLE_CLOUD_PROJECT"),
-                location=os.getenv("GOOGLE_CLOUD_LOCATION"),
+                location=location,
                 credentials=creds_json,
                 credentials_path=creds_path if not creds_json else None,
                 model="google/gemini-2.0-flash-exp",
