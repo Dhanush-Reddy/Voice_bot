@@ -102,7 +102,7 @@ function ActiveRoom({ onDisconnect }: { onDisconnect: () => void }) {
                 setStatusText("Disconnected");
                 break;
         }
-    }, [connectionState, participants, isSpeaking, room]);
+    }, [connectionState, participants, isBotSpeaking, room]);
 
     const handleDisconnect = useCallback(() => {
         room?.disconnect();
@@ -165,7 +165,7 @@ function ActiveRoom({ onDisconnect }: { onDisconnect: () => void }) {
                 <div className="flex items-center justify-center gap-2">
                     <span className="status-dot connected" />
                     <span className="text-xs text-slate-400 uppercase tracking-wider">
-                        Connected (v1.1.21-ANIM)
+                        Connected (v1.1.23-FIX)
                     </span>
                 </div>
             </div>
