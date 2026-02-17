@@ -300,6 +300,7 @@ class AgentPool:
         return {
             "pool_size": self.pool_size,
             "ready": self._ready_agents.qsize(),
+            "ready_rooms": [a.room_name for a in self._all_agents if a.ready],
             "all_agents": len(self._all_agents),
             "total_spawned": len(self._all_agents),
             "running": self._running,
