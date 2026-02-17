@@ -187,6 +187,19 @@ class AgentPool:
                     f"🔄 Pool replenished (room={agent.room_name}), {self._ready_agents.qsize()} ready"
                 )
 
+    async def _stream_logs(self, stream, label, room_name):
+        """Streams subprocess pipe to the main logger."""
+        logger.info(f"📡 Started log streaming for {room_name} ({label})")
+        try:
+            while True:
+                line = await stream.readline()
+                if not line:
+                    break
+                # Print to stdout so Cloud Run captures it
+                print(f"[{room_name}] [{label}] {line.decode().strip()}", flush=True)
+        except Exception as e:
+            logger.error(f"❌ Log streaming error for {room_name}: {e}")
+
     async def _spawn_agent(self) -> PooledAgent:
         """Spawn a bot worker subprocess with retry logic."""
         room_name = f"voice-room-{uuid.uuid4().hex[:8]}"
@@ -211,6 +224,10 @@ class AgentPool:
                     stderr=asyncio.subprocess.PIPE
                 )
                 agent.process = proc
+                
+                # Start background log streaming tasks
+                asyncio.create_task(self._stream_logs(proc.stdout, "STDOUT", room_name))
+                asyncio.create_task(self._stream_logs(proc.stderr, "STDERR", room_name))
                 
                 # Wait for agent to initialize
                 await asyncio.sleep(AGENT_STARTUP_TIME)
