@@ -173,9 +173,9 @@ async def create_pipeline(room_name: str) -> tuple[PipelineTask, LiveKitTranspor
             vad_analyzer=SileroVADAnalyzer(
                 params=VADParams(
                     confidence=0.7,
-                    start_secs=0.15,      # Faster speech start detection
-                    stop_secs=0.35,       # Slightly longer to avoid cutoffs
-                    min_volume=0.25,      # More sensitive for Indian accents
+                    start_secs=0.2,       # Slightly more stable
+                    stop_secs=0.5,        # Longer to avoid cutoffs
+                    min_volume=0.4,       # Filter more background noise
                 )
             ),
         ),
@@ -225,15 +225,11 @@ async def create_pipeline(room_name: str) -> tuple[PipelineTask, LiveKitTranspor
     # --- CRITICAL: Audio output event handlers for proper audio flow ---
     @output_transport.event_handler("on_bot_started_speaking")
     async def on_bot_started_speaking():
-        logger.debug("🗣️ Bot STARTED speaking - audio output active")
+        logger.debug("🗣️ Bot STARTED speaking")
 
     @output_transport.event_handler("on_bot_stopped_speaking")
     async def on_bot_stopped_speaking():
-        logger.debug("🤐 Bot STOPPED speaking - audio output complete")
-
-    @output_transport.event_handler("on_audio_frame")
-    async def on_audio_frame(frame):
-        logger.debug(f"🔊 Audio frame sending: {len(frame.data) if hasattr(frame, 'data') else 'unknown'} bytes")
+        logger.debug("🤐 Bot STOPPED speaking")
 
     # --- Error handling ---
     @gemini_live_service.event_handler("on_error")
