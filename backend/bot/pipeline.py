@@ -99,7 +99,14 @@ async def _create_gemini_service_with_retry() -> GeminiLiveVertexLLMService:
             
             # Support both file path and raw JSON string for easier cloud deployment
             creds_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+            if creds_json and (creds_json.strip() == "{}" or not creds_json.strip()):
+                logger.info("🔑 Empty credentials JSON detected, skipping to use ADC")
+                creds_json = None
+                
             creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            if creds_path and not os.path.exists(creds_path):
+                logger.warning(f"⚠️ Credentials path does not exist: {creds_path}")
+                creds_path = None
             
             voice_id = os.getenv("BOT_VOICE", "Aoede")
             
