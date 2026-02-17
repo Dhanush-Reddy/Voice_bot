@@ -105,11 +105,11 @@ class AgentPool:
                 for agent in dead_agents:
                     await self._remove_agent(agent)
                     
-                # Replenish pool if needed
-                current_size = self._ready_agents.qsize()
-                if current_size < self.pool_size:
-                    needed = self.pool_size - current_size
-                    logger.info(f"🔄 Replenishing pool: {needed} agents needed")
+                # Replenish pool if needed based on ACTUAL tracked agents
+                current_count = len(self._all_agents)
+                if current_count < self.pool_size:
+                    needed = self.pool_size - current_count
+                    logger.info(f"🔄 Replenishing pool: {needed} agents needed (current healthy/total: {current_count})")
                     for _ in range(needed):
                         asyncio.create_task(self._replenish())
                         
@@ -175,8 +175,8 @@ class AgentPool:
     async def _replenish(self) -> None:
         """Spawn a new agent to refill the pool."""
         async with self._lock:
-            # Double-check pool size
-            if self._ready_agents.qsize() >= self.pool_size:
+            # Double-check ACTUAL tracked agents count
+            if len(self._all_agents) >= self.pool_size:
                 return
                 
             agent = await self._spawn_agent()
