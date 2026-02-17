@@ -198,13 +198,17 @@ class AgentPool:
             try:
                 logger.info(f"🤖 Spawning agent for room {room_name} (attempt {attempt})...")
                 
+                import sys
                 proc = await asyncio.create_subprocess_exec(
-                    "python",
+                    sys.executable,
                     "-m",
                     "bot.runner",
                     "--room",
                     room_name,
                     cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    env=os.environ.copy(),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
                 )
                 agent.process = proc
                 
@@ -279,8 +283,14 @@ class AgentPool:
         return {
             "pool_size": self.pool_size,
             "ready": self._ready_agents.qsize(),
+            "all_agents": len(self._all_agents),
             "total_spawned": len(self._all_agents),
             "running": self._running,
+            "livekit_config": {
+                "has_url": bool(LIVEKIT_URL),
+                "has_key": bool(LIVEKIT_API_KEY),
+                "has_secret": bool(LIVEKIT_API_SECRET)
+            }
         }
 
 
