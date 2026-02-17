@@ -79,6 +79,9 @@ async def generate_token(
             "url": LIVEKIT_URL,
             "room_name": agent.room_name,
         }
+    except HTTPException:
+        # Re-raise FastAPIs own errors (like 503) so they aren't masked as 500
+        raise
     except Exception as e:
         logger.error(f"❌ Error generating token: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

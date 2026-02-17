@@ -136,13 +136,11 @@ class AgentPool:
     async def pop(self) -> Optional[PooledAgent]:
         """
         Pop a ready agent from the pool (instant).
-        Triggers background replenishment.
+        Drains the queue until a healthy agent is found.
         """
-        max_retries = 3
-        
-        for attempt in range(max_retries):
+        # 1. Try to drain the queue for a healthy agent
+        while not self._ready_agents.empty():
             try:
-                # Try to get from pool
                 agent = self._ready_agents.get_nowait()
                 
                 # Verify agent is still healthy
@@ -158,32 +156,43 @@ class AgentPool:
                     asyncio.create_task(self._replenish())
                     return agent
                 else:
-                    # Agent died, remove it and try again
-                    logger.warning(f"⚠️ Popped dead agent, removing and retrying...")
+                    # Agent died, remove it and continue draining
+                    logger.warning(f"⚠️ Skipping dead agent in queue (room={agent.room_name})")
                     await self._remove_agent(agent)
-                    
             except asyncio.QueueEmpty:
-                # Pool exhausted — spawn one on-demand
-                logger.warning(f"⚠️ Agent pool exhausted! Spawning on-demand (attempt {attempt + 1})...")
-                
-                # Check for queue desynchronization (suspicious cloud behavior)
-                if self._ready_agents.qsize() > self.pool_size * 2:
-                    logger.warning(f"🚨 Queue desync detected (size={self._ready_agents.qsize()})! Clearing queue…")
-                    while not self._ready_agents.empty():
-                        try:
-                            self._ready_agents.get_nowait()
-                        except:
-                            break
-                
-                agent = await self._spawn_agent()
-                if isinstance(agent, PooledAgent):
-                    return agent
-                
-                # Wait before retry
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(0.5)
-                    
-        logger.error("❌ Failed to get agent after all retries")
+                break
+            except Exception as e:
+                logger.error(f"❌ Error during pool pop: {e}")
+                break
+
+        # 2. Pool exhausted (or only dead agents) — spawn one on-demand
+        logger.warning(f"⚠️ Ready agents exhausted! Spawning ONE-TIME agent on-demand...")
+        
+        # Guard against queue desync (if qsize is large but we got nothing)
+        if self._ready_agents.qsize() > self.pool_size:
+            logger.warning(f"🚨 Queue desync detected (size={self._ready_agents.qsize()})! Draining queue forcefully…")
+            while not self._ready_agents.empty():
+                try: self._ready_agents.get_nowait()
+                except: break
+
+        try:
+            agent = await self._spawn_agent()
+            if isinstance(agent, PooledAgent):
+                # Track on-demand agents too, so they can be cleaned up if they leak
+                self._all_agents.append(agent) 
+                # Note: We don't remove it from _all_agents immediately because
+                # the caller is about to use it. But we MUST ensure it's not in the queue.
+                # Actually, pop() logic expects the returned agent to NOT be in _all_agents 
+                # for replenishment tracking if it was a "pooled" agent.
+                # For on-demand, we can just return it. 
+                # BUT if we want to BE SAFE, we should remove it from all_agents right before return
+                # so the pool count doesn't include active users.
+                if agent in self._all_agents:
+                    self._all_agents.remove(agent)
+                return agent
+        except Exception as e:
+            logger.error(f"❌ Failed to spawn on-demand agent: {e}")
+            
         return None
 
     async def _replenish(self) -> None:
@@ -315,8 +324,7 @@ class AgentPool:
             "pool_size": self.pool_size,
             "ready": self._ready_agents.qsize(),
             "ready_rooms": [a.room_name for a in self._all_agents if a.ready],
-            "all_agents": len(self._all_agents),
-            "total_spawned": len(self._all_agents),
+            "total_tracked": len(self._all_agents),
             "running": self._running,
             "livekit_config": {
                 "has_url": bool(LIVEKIT_URL),
