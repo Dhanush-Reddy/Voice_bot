@@ -175,7 +175,7 @@ async def create_pipeline(room_name: str) -> tuple[PipelineTask, LiveKitTranspor
                     confidence=0.7,
                     start_secs=0.2,       # Slightly more stable
                     stop_secs=0.5,        # Longer to avoid cutoffs
-                    min_volume=0.4,       # Filter more background noise
+                    min_volume=0.15,       # Filter more background noise
                 )
             ),
         ),
