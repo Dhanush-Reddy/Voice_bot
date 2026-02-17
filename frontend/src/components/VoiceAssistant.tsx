@@ -165,7 +165,7 @@ function ActiveRoom({ onDisconnect }: { onDisconnect: () => void }) {
                 <div className="flex items-center justify-center gap-2">
                     <span className="status-dot connected" />
                     <span className="text-xs text-slate-400 uppercase tracking-wider">
-                        Connected
+                        Connected (v1.1.21-ANIM)
                     </span>
                 </div>
             </div>
