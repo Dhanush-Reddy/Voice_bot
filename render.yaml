@@ -27,7 +27,7 @@ services:
       - key: BOT_VOICE
         value: Aoede  # Options: Aoede (Female), Kore (Female), Puck (Male), Charon (Male)
       - key: PORT
-        value: "8000"
+        value: "8080"
     healthCheckPath: /api/health
     buildFilter:
       paths:
