@@ -17,13 +17,13 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-LIVEKIT_URL = os.getenv("LIVEKIT_URL", "").strip()
+LIVEKIT_URL = os.getenv("LIVEKIT_URL", "").strip().rstrip("/")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "").strip()
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "").strip()
 POOL_SIZE = int(os.getenv("AGENT_POOL_SIZE", "3"))
 
 # Health check constants
-AGENT_STARTUP_TIME = 3.0  # seconds to wait for agent to start
+AGENT_STARTUP_TIME = 5.0  # seconds to wait for agent to start (increased for cloud reliability)
 AGENT_HEALTH_CHECK_INTERVAL = 10.0  # seconds between health checks
 MAX_AGENT_AGE = 600  # 10 minutes max age before recycling
 
@@ -147,6 +147,10 @@ class AgentPool:
                 
                 # Verify agent is still healthy
                 if agent.process and agent.process.returncode is None:
+                    # CRITICAL: Remove from tracking list so pool can replenish
+                    if agent in self._all_agents:
+                        self._all_agents.remove(agent)
+                        
                     logger.info(
                         f"⚡ Popped agent from pool (room={agent.room_name}), {self._ready_agents.qsize()} remaining"
                     )
@@ -161,6 +165,16 @@ class AgentPool:
             except asyncio.QueueEmpty:
                 # Pool exhausted — spawn one on-demand
                 logger.warning(f"⚠️ Agent pool exhausted! Spawning on-demand (attempt {attempt + 1})...")
+                
+                # Check for queue desynchronization (suspicious cloud behavior)
+                if self._ready_agents.qsize() > self.pool_size * 2:
+                    logger.warning(f"🚨 Queue desync detected (size={self._ready_agents.qsize()})! Clearing queue…")
+                    while not self._ready_agents.empty():
+                        try:
+                            self._ready_agents.get_nowait()
+                        except:
+                            break
+                
                 agent = await self._spawn_agent()
                 if isinstance(agent, PooledAgent):
                     return agent

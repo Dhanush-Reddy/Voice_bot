@@ -24,7 +24,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-LIVEKIT_URL = os.getenv("LIVEKIT_URL", "").strip()
+LIVEKIT_URL = os.getenv("LIVEKIT_URL", "").strip().rstrip("/")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "").strip()
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "").strip()
 
@@ -109,8 +109,12 @@ async def _create_gemini_service_with_retry() -> GeminiLiveVertexLLMService:
                 
             creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
             if creds_path and not os.path.exists(creds_path):
-                logger.warning(f"⚠️ Credentials path does not exist: {creds_path}")
+                logger.warning(f"⚠️ Credentials file NOT FOUND: {creds_path}")
                 creds_path = None
+            
+            # Diagnostic details (safe for production)
+            logger.info(f"🧠 Service: location={os.getenv('GOOGLE_CLOUD_LOCATION')}, project={os.getenv('GOOGLE_CLOUD_PROJECT')}, voice={os.getenv('BOT_VOICE', 'Aoede')}")
+            logger.info(f"🧠 Service: has_creds_json={bool(creds_json)}, has_creds_path={bool(creds_path)}")
             
             voice_id = os.getenv("BOT_VOICE", "Aoede")
             
@@ -119,7 +123,7 @@ async def _create_gemini_service_with_retry() -> GeminiLiveVertexLLMService:
                 location=os.getenv("GOOGLE_CLOUD_LOCATION"),
                 credentials=creds_json,
                 credentials_path=creds_path if not creds_json else None,
-                model="google/gemini-live-2.5-flash-native-audio",
+                model="google/gemini-2.0-flash-exp",
                 system_instruction=SYSTEM_PROMPT,
                 voice_id=voice_id,
                 params=InputParams(

@@ -69,7 +69,7 @@ async def generate_token(
         token = agent_pool.generate_user_token(agent.room_name, participant_name)
 
         logger.info(
-            "🎫 Token issued for room %s (participant=%s)",
+            "🎫 Token issued for room: %s (participant=%s)",
             agent.room_name,
             participant_name,
         )
