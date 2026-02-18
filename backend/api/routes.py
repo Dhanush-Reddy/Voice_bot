@@ -8,6 +8,7 @@ Architecture:
 """
 
 import os
+import time
 import logging
 from contextlib import asynccontextmanager
 from typing import List, Optional
@@ -51,6 +52,9 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+
+# Track server start time for uptime reporting
+_start_time = time.time()
 
 # CORS — allow the Next.js frontend and dashboard
 app.add_middleware(
@@ -164,6 +168,30 @@ async def delete_agent(agent_id: str):
         raise HTTPException(status_code=404, detail="Agent not found.")
 
 
+@app.get("/api/agents/search", response_model=List[AgentConfig])
+async def search_agents(
+    name: Optional[str] = Query(None, description="Filter by name (case-insensitive substring)"),
+    language: Optional[str] = Query(None, description="Filter by language code, e.g. en-US"),
+    active_only: bool = Query(False, description="Return only active agents"),
+):
+    """
+    Search agents by name, language, or active status.
+
+    All filters are optional and combinable. Returns all agents if no
+    filters are provided.
+    """
+    agents = await agent_service.list_agents()
+
+    if name:
+        agents = [a for a in agents if name.lower() in a.name.lower()]
+    if language:
+        agents = [a for a in agents if a.language == language]
+    if active_only:
+        agents = [a for a in agents if a.is_active]
+
+    return agents
+
+
 # ---------------------------------------------------------------------------
 # Call log endpoints (Sprint 4 will add LiveKit webhook here)
 # ---------------------------------------------------------------------------
@@ -196,7 +224,7 @@ async def pool_status():
 
 @app.get("/api/health")
 async def health():
-    """Comprehensive health check for monitoring."""
+    """Comprehensive health check for monitoring and uptime tracking."""
     config_ok = all([
         os.getenv("LIVEKIT_URL"),
         os.getenv("LIVEKIT_API_KEY"),
@@ -204,10 +232,12 @@ async def health():
         os.getenv("GOOGLE_CLOUD_PROJECT"),
         os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
     ])
+    uptime_seconds = int(time.time() - _start_time)
     return {
         "status": "ok",
         "version": "2.0.0",
         "config_ok": config_ok,
+        "uptime_seconds": uptime_seconds,
         "pool": agent_pool.status,
         "env_check": {
             "has_lk_url": bool(os.getenv("LIVEKIT_URL")),
