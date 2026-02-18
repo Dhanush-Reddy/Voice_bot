@@ -17,9 +17,8 @@ out/
 .env
 .env.*
 .env.local
-.env.example
-.env.sample
-.env.template
+# .env.example is a TEMPLATE (no secrets) — safe to commit
+!.env.example
 
 # Google Cloud credentials (SECURITY - NEVER COMMIT!)
 *credentials*.json
