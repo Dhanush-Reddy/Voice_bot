@@ -13,10 +13,10 @@ import time
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 
+from core.config import settings
 from bot.pool import agent_pool, LIVEKIT_URL
 from models.agent import (
     AgentConfig,
@@ -30,8 +30,6 @@ from services.agent_service import agent_service
 from services.call_log_service import call_log_service
 from services.config_service import config_service
 from services.knowledge_service import knowledge_service
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -347,30 +345,19 @@ async def config_cache_stats():
 @app.get("/api/health")
 async def health():
     """Comprehensive health check for monitoring."""
-    config_ok = all([
-        os.getenv("LIVEKIT_URL"),
-        os.getenv("LIVEKIT_API_KEY"),
-        os.getenv("LIVEKIT_API_SECRET"),
-        os.getenv("GOOGLE_CLOUD_PROJECT"),
-        os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
-    ])
-    uptime_seconds = int(time.time() - _start_time)
     return {
         "status": "ok",
         "version": "2.0.0",
-        "config_ok": config_ok,
-        "uptime_seconds": uptime_seconds,
+        "config_ok": settings.livekit_configured and settings.gemini_configured,
+        "uptime_seconds": settings.uptime_seconds,
         "pool": agent_pool.status,
         "config_cache": config_service.cache_stats,
         "calls": call_log_service.stats,
         "env_check": {
-            "has_lk_url": bool(os.getenv("LIVEKIT_URL")),
-            "has_lk_key": bool(os.getenv("LIVEKIT_API_KEY")),
-            "has_lk_secret": bool(os.getenv("LIVEKIT_API_SECRET")),
-            "has_gcp_project": bool(os.getenv("GOOGLE_CLOUD_PROJECT")),
-            "has_gcp_creds": bool(
-                os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-                or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-            ),
+            "has_lk_url": bool(settings.livekit_url),
+            "has_lk_key": bool(settings.livekit_api_key),
+            "has_lk_secret": bool(settings.livekit_api_secret),
+            "has_gcp_project": bool(settings.google_cloud_project),
+            "has_gcp_creds": settings.gemini_configured,
         },
     }

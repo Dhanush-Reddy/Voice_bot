@@ -12,7 +12,6 @@ import logging
 import time
 from typing import Optional
 
-from dotenv import load_dotenv
 from livekit.api import AccessToken, VideoGrants
 from pipecat.frames.frames import TextFrame
 from pipecat.pipeline.pipeline import Pipeline
@@ -24,16 +23,15 @@ from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 
+from core.config import settings
 from models.agent import AgentConfig
 from services.knowledge_service import knowledge_service
 
-load_dotenv()
-
 logger = logging.getLogger(__name__)
 
-LIVEKIT_URL = os.getenv("LIVEKIT_URL", "").strip().rstrip("/")
-LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "").strip()
-LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "").strip()
+LIVEKIT_URL = settings.livekit_url
+LIVEKIT_API_KEY = settings.livekit_api_key
+LIVEKIT_API_SECRET = settings.livekit_api_secret
 
 # Diagnostic log (safe for production)
 if LIVEKIT_URL:
@@ -113,34 +111,26 @@ async def _create_gemini_service(
         try:
             logger.info("🧠 Gemini connection attempt %d/%d…", attempt, MAX_RETRY_ATTEMPTS)
 
-            creds_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-            if creds_json and (creds_json.strip() == "{}" or not creds_json.strip()):
-                creds_json = None
-
-            creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-            if creds_path and not os.path.exists(creds_path):
-                logger.warning("⚠️ Credentials file NOT FOUND: %s", creds_path)
-                creds_path = None
-
-            gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-            location = os.getenv("GOOGLE_CLOUD_LOCATION") or "us-central1"
+            creds_json = settings.google_credentials_json
+            gemini_api_key = settings.gemini_api_key
+            location = settings.google_cloud_location
 
             # ── Choose auth strategy ──────────────────────────────────────────
             # Priority:
             #   1. Vertex AI with service account JSON (production / Render)
             #   2. Gemini API key (local dev — no service account needed)
-            use_vertex = bool(creds_json or creds_path)
+            use_vertex = bool(creds_json)
 
             if use_vertex:
                 logger.info(
                     "🧠 Vertex AI: location=%s, project=%s, voice=%s, model=%s",
-                    location, os.getenv("GOOGLE_CLOUD_PROJECT"), voice_id, model,
+                    location, settings.google_cloud_project, voice_id, model,
                 )
                 service = GeminiLiveVertexLLMService(
-                    project_id=os.getenv("GOOGLE_CLOUD_PROJECT"),
+                    project_id=settings.google_cloud_project,
                     location=location,
                     credentials=creds_json,
-                    credentials_path=creds_path if not creds_json else None,
+                    credentials_path=None,
                     model=model,
                     system_instruction=system_prompt,
                     voice_id=voice_id,

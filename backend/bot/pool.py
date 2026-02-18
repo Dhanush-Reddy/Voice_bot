@@ -1,7 +1,3 @@
-"""
-BULLETPROOF Agent Pool — ensures 100% reliability with health checks and auto-recovery.
-"""
-
 import asyncio
 import logging
 import os
@@ -10,17 +6,16 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from dotenv import load_dotenv
 from livekit.api import AccessToken, VideoGrants
 
-load_dotenv()
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-LIVEKIT_URL = os.getenv("LIVEKIT_URL", "").strip().rstrip("/")
-LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "").strip()
-LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "").strip()
-POOL_SIZE = int(os.getenv("AGENT_POOL_SIZE", "3"))
+LIVEKIT_URL = settings.livekit_url
+LIVEKIT_API_KEY = settings.livekit_api_key
+LIVEKIT_API_SECRET = settings.livekit_api_secret
+POOL_SIZE = settings.agent_pool_size
 
 # Health check constants
 AGENT_STARTUP_TIME = 5.0  # seconds to wait for agent to start (increased for cloud reliability)
@@ -56,6 +51,17 @@ class AgentPool:
     async def start(self) -> None:
         """Initialize the pool with health monitoring."""
         self._running = True
+
+        # Guard: skip pre-warming if LiveKit is not configured
+        # (prevents 401 error floods in logs during local dev without credentials)
+        if not settings.livekit_configured:
+            logger.warning(
+                "⚠️  LiveKit not configured — skipping pool pre-warming. "
+                "Set LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET to enable."
+            )
+            self._health_check_task = asyncio.create_task(self._health_monitor())
+            return
+
         logger.info(f"🚀 [BULLETPROOF] Starting agent pool with {self.pool_size} slots…")
 
         # Spawn all agents concurrently
@@ -337,9 +343,9 @@ class AgentPool:
             "total_tracked": len(self._all_agents),
             "running": self._running,
             "livekit_config": {
-                "has_url": bool(LIVEKIT_URL),
-                "has_key": bool(LIVEKIT_API_KEY),
-                "has_secret": bool(LIVEKIT_API_SECRET)
+                "has_url": bool(settings.livekit_url),
+                "has_key": bool(settings.livekit_api_key),
+                "has_secret": bool(settings.livekit_api_secret),
             }
         }
 
