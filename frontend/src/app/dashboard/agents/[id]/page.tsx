@@ -372,7 +372,7 @@ export default function AgentEditorPage() {
                                 type="text"
                                 value={form.first_message}
                                 onChange={(e) => setForm({ ...form, first_message: e.target.value })}
-                                placeholder='e.g. "Hello! I\'m calling from Acme Corp. Is this {{user_name}}?"'
+                                placeholder={`e.g. "Hello! I'm calling from Acme Corp. Is this {{user_name}}?"`}
                                 className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-violet-500/50 transition-colors"
                             />
                         </div>
