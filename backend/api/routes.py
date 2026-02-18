@@ -26,6 +26,7 @@ from models.agent import (
 from models.call_log import CallLog, CallLogCreateRequest
 from services.agent_service import agent_service
 from services.call_log_service import call_log_service
+from services.config_service import config_service
 
 load_dotenv()
 
@@ -91,8 +92,8 @@ async def generate_token(
         else:
             agent = await agent_service.get_default_agent()
 
-        # Pop a ready agent from the pool
-        pool_agent = await agent_pool.pop()
+        # Pop a ready agent from the pool, passing agent_id for on-demand spawning
+        pool_agent = await agent_pool.pop(agent_id=agent_id)
         if pool_agent is None:
             raise HTTPException(
                 status_code=503,
@@ -194,6 +195,40 @@ async def pool_status():
     return agent_pool.status
 
 
+# ---------------------------------------------------------------------------
+# Sprint 3: Hot-reload & cache management
+# ---------------------------------------------------------------------------
+@app.post("/api/agents/{agent_id}/reload", status_code=200)
+async def reload_agent_config(agent_id: str):
+    """
+    Hot-reload an agent's config without restarting the server.
+
+    Invalidates the ConfigService TTL cache for this agent so the next
+    call to config_service.get(agent_id) fetches a fresh copy from the
+    AgentService (and eventually Supabase in Sprint 4).
+    """
+    agent = await agent_service.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found.")
+
+    config_service.invalidate(agent_id)
+    logger.info("🔥 Hot-reload triggered for agent: %s (%s)", agent.name, agent_id)
+    return {"message": f"Config cache cleared for agent '{agent.name}'. Next call will use updated config.", "agent_id": agent_id}
+
+
+@app.post("/api/config/flush", status_code=200)
+async def flush_config_cache():
+    """Flush the entire config cache (use after bulk agent updates)."""
+    config_service.invalidate_all()
+    return {"message": "Entire config cache flushed."}
+
+
+@app.get("/api/config/cache")
+async def config_cache_stats():
+    """Return ConfigService cache statistics for debugging and monitoring."""
+    return config_service.cache_stats
+
+
 @app.get("/api/health")
 async def health():
     """Comprehensive health check for monitoring."""
@@ -209,6 +244,7 @@ async def health():
         "version": "2.0.0",
         "config_ok": config_ok,
         "pool": agent_pool.status,
+        "config_cache": config_service.cache_stats,
         "env_check": {
             "has_lk_url": bool(os.getenv("LIVEKIT_URL")),
             "has_lk_key": bool(os.getenv("LIVEKIT_API_KEY")),

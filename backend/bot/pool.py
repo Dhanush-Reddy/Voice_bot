@@ -32,6 +32,7 @@ MAX_AGENT_AGE = 600  # 10 minutes max age before recycling
 class PooledAgent:
     """A pre-warmed agent sitting in a LiveKit room, waiting for a user."""
     room_name: str
+    agent_id: Optional[str] = None
     process: Optional[asyncio.subprocess.Process] = None
     created_at: float = field(default_factory=time.time)
     ready: bool = False
@@ -133,66 +134,65 @@ class AgentPool:
         except Exception as e:
             logger.error(f"❌ Error removing agent: {e}")
 
-    async def pop(self) -> Optional[PooledAgent]:
+    async def pop(self, agent_id: Optional[str] = None) -> Optional[PooledAgent]:
         """
         Pop a ready agent from the pool (instant).
         Drains the queue until a healthy agent is found.
+
+        Args:
+            agent_id: If provided, spawn on-demand agents with this config.
         """
         # 1. Try to drain the queue for a healthy agent
         while not self._ready_agents.empty():
             try:
                 agent = self._ready_agents.get_nowait()
-                
+
                 # Verify agent is still healthy
                 if agent.process and agent.process.returncode is None:
                     # CRITICAL: Remove from tracking list so pool can replenish
                     if agent in self._all_agents:
                         self._all_agents.remove(agent)
-                        
+
                     logger.info(
-                        f"⚡ Popped agent from pool (room={agent.room_name}), {self._ready_agents.qsize()} remaining"
+                        "⚡ Popped agent from pool (room=%s), %d remaining",
+                        agent.room_name, self._ready_agents.qsize(),
                     )
                     # Replenish in background
                     asyncio.create_task(self._replenish())
                     return agent
                 else:
                     # Agent died, remove it and continue draining
-                    logger.warning(f"⚠️ Skipping dead agent in queue (room={agent.room_name})")
+                    logger.warning("⚠️ Skipping dead agent in queue (room=%s)", agent.room_name)
                     await self._remove_agent(agent)
             except asyncio.QueueEmpty:
                 break
-            except Exception as e:
-                logger.error(f"❌ Error during pool pop: {e}")
+            except Exception as exc:
+                logger.error("❌ Error during pool pop: %s", exc)
                 break
 
-        # 2. Pool exhausted (or only dead agents) — spawn one on-demand
-        logger.warning(f"⚠️ Ready agents exhausted! Spawning ONE-TIME agent on-demand...")
-        
-        # Guard against queue desync (if qsize is large but we got nothing)
+        # 2. Pool exhausted — spawn one on-demand
+        logger.warning("⚠️ Ready agents exhausted! Spawning ONE-TIME agent on-demand…")
+
         if self._ready_agents.qsize() > self.pool_size:
-            logger.warning(f"🚨 Queue desync detected (size={self._ready_agents.qsize()})! Draining queue forcefully…")
+            logger.warning(
+                "🚨 Queue desync detected (size=%d)! Draining queue forcefully…",
+                self._ready_agents.qsize(),
+            )
             while not self._ready_agents.empty():
-                try: self._ready_agents.get_nowait()
-                except: break
+                try:
+                    self._ready_agents.get_nowait()
+                except Exception:
+                    break
 
         try:
-            agent = await self._spawn_agent()
+            agent = await self._spawn_agent(agent_id=agent_id)
             if isinstance(agent, PooledAgent):
-                # Track on-demand agents too, so they can be cleaned up if they leak
-                self._all_agents.append(agent) 
-                # Note: We don't remove it from _all_agents immediately because
-                # the caller is about to use it. But we MUST ensure it's not in the queue.
-                # Actually, pop() logic expects the returned agent to NOT be in _all_agents 
-                # for replenishment tracking if it was a "pooled" agent.
-                # For on-demand, we can just return it. 
-                # BUT if we want to BE SAFE, we should remove it from all_agents right before return
-                # so the pool count doesn't include active users.
                 if agent in self._all_agents:
                     self._all_agents.remove(agent)
                 return agent
-        except Exception as e:
-            logger.error(f"❌ Failed to spawn on-demand agent: {e}")
-            
+        except Exception as exc:
+            logger.error("❌ Failed to spawn on-demand agent: %s", exc)
+
         return None
 
     async def _replenish(self) -> None:
@@ -223,62 +223,72 @@ class AgentPool:
         except Exception as e:
             logger.error(f"❌ Log streaming error for {room_name}: {e}")
 
-    async def _spawn_agent(self) -> PooledAgent:
-        """Spawn a bot worker subprocess with retry logic."""
+    async def _spawn_agent(self, agent_id: Optional[str] = None) -> PooledAgent:
+        """Spawn a bot worker subprocess with retry logic.
+
+        Args:
+            agent_id: Agent UUID to pass to the worker for dynamic config.
+        """
         room_name = f"voice-room-{uuid.uuid4().hex[:8]}"
-        agent = PooledAgent(room_name=room_name)
-        
+        agent = PooledAgent(room_name=room_name, agent_id=agent_id)
+
         max_attempts = 3
-        
+
         for attempt in range(1, max_attempts + 1):
             try:
-                logger.info(f"🤖 Spawning agent for room {room_name} (attempt {attempt})...")
-                
+                logger.info(
+                    "🤖 Spawning agent for room %s (attempt %d, agent_id=%s)…",
+                    room_name, attempt, agent_id,
+                )
+
                 import sys
+                cmd = [
+                    sys.executable, "-m", "bot.runner",
+                    "--room", room_name,
+                ]
+                if agent_id:
+                    cmd += ["--agent-id", agent_id]
+
                 proc = await asyncio.create_subprocess_exec(
-                    sys.executable,
-                    "-m",
-                    "bot.runner",
-                    "--room",
-                    room_name,
+                    *cmd,
                     cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     env=os.environ.copy(),
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 agent.process = proc
-                
+
                 # Start background log streaming tasks
                 asyncio.create_task(self._stream_logs(proc.stdout, "STDOUT", room_name))
                 asyncio.create_task(self._stream_logs(proc.stderr, "STDERR", room_name))
-                
+
                 # Wait for agent to initialize
                 await asyncio.sleep(AGENT_STARTUP_TIME)
-                
+
                 # Check if process is still alive
                 if proc.returncode is not None:
-                    logger.error(f"❌ Agent process died immediately (code: {proc.returncode})")
+                    logger.error("❌ Agent process died immediately (code: %d)", proc.returncode)
                     if attempt < max_attempts:
                         await asyncio.sleep(1)
                         continue
                     else:
-                        raise Exception(f"Agent failed to start after {max_attempts} attempts")
-                
+                        raise RuntimeError(f"Agent failed to start after {max_attempts} attempts")
+
                 agent.ready = True
                 agent.health_check_passed = True
                 agent.last_health_check = time.time()
-                
-                logger.info(f"✅ Agent spawned in room {room_name} (pid={proc.pid})")
+
+                logger.info("✅ Agent spawned in room %s (pid=%d)", room_name, proc.pid)
                 return agent
-                
-            except Exception as e:
-                logger.error(f"❌ Attempt {attempt} failed to spawn agent: {e}")
+
+            except Exception as exc:
+                logger.error("❌ Attempt %d failed to spawn agent: %s", attempt, exc)
                 if attempt < max_attempts:
                     await asyncio.sleep(1)
                 else:
                     raise
-        
-        raise Exception(f"Failed to spawn agent after {max_attempts} attempts")
+
+        raise RuntimeError(f"Failed to spawn agent after {max_attempts} attempts")
 
     def generate_user_token(self, room_name: str, participant_name: str) -> str:
         """Generate a LiveKit token for a user to join a pre-warmed room."""
