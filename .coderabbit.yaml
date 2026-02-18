@@ -1,0 +1,48 @@
+# CodeRabbit Configuration
+# Docs: https://docs.coderabbit.ai/guides/configure-coderabbit
+
+version: "2"
+
+reviews:
+  # Auto-review all PRs
+  auto_review:
+    enabled: true
+    drafts: false
+
+  # Focus areas for review
+  profile: "chill"  # Options: chill, assertive
+  
+  # Path-specific instructions
+  path_instructions:
+    - path: "backend/**/*.py"
+      instructions: |
+        - Enforce type hints on all function signatures.
+        - Ensure all async functions are properly awaited.
+        - Check that business logic is in services/, not in routes.
+        - Verify Pydantic models are used for all request/response shapes.
+        - Flag any bare `except:` clauses — always catch specific exceptions.
+        - Ensure no secrets or API keys are hardcoded.
+
+    - path: "frontend/src/**/*.tsx"
+      instructions: |
+        - Enforce TypeScript strict mode — no `any` types.
+        - Ensure components are small and focused (< 150 lines preferred).
+        - Check that custom hooks are used for complex state logic.
+        - Verify all API calls handle loading, error, and empty states.
+        - Ensure all interactive elements have unique IDs for accessibility.
+
+    - path: "frontend/src/components/**"
+      instructions: |
+        - Components should be reusable and accept props rather than hardcoding values.
+        - Ensure consistent styling using the established design tokens.
+
+  # Ignore generated files
+  path_filters:
+    - "!**/__pycache__/**"
+    - "!**/.next/**"
+    - "!**/node_modules/**"
+    - "!**/*.lock"
+
+chat:
+  # Allow CodeRabbit to respond to comments
+  auto_reply: true

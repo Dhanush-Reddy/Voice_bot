@@ -1,16 +1,31 @@
 """
-FastAPI routes — token generation via agent pool and bot worker dispatch.
+FastAPI routes — token generation, agent CRUD, and health checks.
+
+Architecture:
+- Routes are thin: they validate input and delegate to services.
+- Business logic lives in services/, not here.
+- Pydantic models in models/ define all request/response shapes.
 """
 
 import os
 import logging
 from contextlib import asynccontextmanager
+from typing import List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from bot.pool import agent_pool, LIVEKIT_URL
+from models.agent import (
+    AgentConfig,
+    AgentCreateRequest,
+    AgentUpdateRequest,
+    TokenResponse,
+)
+from models.call_log import CallLog, CallLogCreateRequest
+from services.agent_service import agent_service
+from services.call_log_service import call_log_service
 
 load_dotenv()
 
@@ -30,9 +45,14 @@ async def lifespan(app: FastAPI):
     await agent_pool.shutdown()
 
 
-app = FastAPI(title="Voice AI Backend", lifespan=lifespan)
+app = FastAPI(
+    title="Voice AI Agency Platform",
+    description="Multi-tenant voice agent backend",
+    version="2.0.0",
+    lifespan=lifespan,
+)
 
-# CORS — allow the Next.js frontend
+# CORS — allow the Next.js frontend and dashboard
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,13 +62,17 @@ app.add_middleware(
 )
 
 
-@app.get("/api/token")
+# ---------------------------------------------------------------------------
+# Token endpoint — now supports optional agent_id for dynamic configuration
+# ---------------------------------------------------------------------------
+@app.get("/api/token", response_model=TokenResponse)
 async def generate_token(
     participant_name: str = Query(..., description="Display name of the participant"),
+    agent_id: Optional[str] = Query(None, description="Agent UUID (uses default if omitted)"),
 ):
     """
-    Pop a pre-warmed agent from the pool and return a token for the user
-    to join its room. The bot is already connected — zero delay.
+    Pop a pre-warmed agent from the pool and return a token for the user.
+    Supports dynamic agent configuration via agent_id.
     """
     try:
         if not LIVEKIT_URL:
@@ -57,36 +81,113 @@ async def generate_token(
                 detail="LiveKit environment variables are not configured.",
             )
 
-        # Pop a ready agent (instant if pool has capacity)
-        agent = await agent_pool.pop()
-        if agent is None:
+        # Validate agent exists if specified
+        if agent_id:
+            agent = await agent_service.get_agent(agent_id)
+            if not agent:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found.")
+            if not agent.is_active:
+                raise HTTPException(status_code=400, detail=f"Agent '{agent_id}' is not active.")
+        else:
+            agent = await agent_service.get_default_agent()
+
+        # Pop a ready agent from the pool
+        pool_agent = await agent_pool.pop()
+        if pool_agent is None:
             raise HTTPException(
                 status_code=503,
                 detail="No agents available. Please try again in a moment.",
             )
 
         # Generate a token for the user to join the agent's pre-warmed room
-        token = agent_pool.generate_user_token(agent.room_name, participant_name)
+        token = agent_pool.generate_user_token(pool_agent.room_name, participant_name)
 
         logger.info(
-            "🎫 Token issued for room: %s (participant=%s)",
-            agent.room_name,
+            "🎫 Token issued for room: %s (participant=%s, agent=%s)",
+            pool_agent.room_name,
             participant_name,
+            agent.id,
         )
 
-        return {
-            "token": token,
-            "url": LIVEKIT_URL,
-            "room_name": agent.room_name,
-        }
+        return TokenResponse(
+            token=token,
+            url=LIVEKIT_URL,
+            room_name=pool_agent.room_name,
+            agent_id=agent.id,
+        )
+
     except HTTPException:
-        # Re-raise FastAPIs own errors (like 503) so they aren't masked as 500
         raise
     except Exception as e:
-        logger.error(f"❌ Error generating token: {e}", exc_info=True)
+        logger.error("❌ Error generating token: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ---------------------------------------------------------------------------
+# Agent CRUD endpoints
+# ---------------------------------------------------------------------------
+@app.get("/api/agents", response_model=List[AgentConfig])
+async def list_agents():
+    """Return all configured agents."""
+    return await agent_service.list_agents()
+
+
+@app.get("/api/agents/{agent_id}", response_model=AgentConfig)
+async def get_agent(agent_id: str):
+    """Return a single agent by ID."""
+    agent = await agent_service.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found.")
+    return agent
+
+
+@app.post("/api/agents", response_model=AgentConfig, status_code=201)
+async def create_agent(request: AgentCreateRequest):
+    """Create a new agent configuration."""
+    return await agent_service.create_agent(request)
+
+
+@app.patch("/api/agents/{agent_id}", response_model=AgentConfig)
+async def update_agent(agent_id: str, request: AgentUpdateRequest):
+    """Update an existing agent's configuration (partial update)."""
+    agent = await agent_service.update_agent(agent_id, request)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found.")
+    return agent
+
+
+@app.delete("/api/agents/{agent_id}", status_code=204)
+async def delete_agent(agent_id: str):
+    """Delete an agent configuration."""
+    deleted = await agent_service.delete_agent(agent_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Agent not found.")
+
+
+# ---------------------------------------------------------------------------
+# Call log endpoints (Sprint 4 will add LiveKit webhook here)
+# ---------------------------------------------------------------------------
+@app.get("/api/calls", response_model=List[CallLog])
+async def list_calls(
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    limit: int = Query(50, le=200),
+):
+    """Return call history, optionally filtered by agent."""
+    return await call_log_service.list_calls(agent_id=agent_id, limit=limit)
+
+
+@app.get("/api/calls/{call_id}", response_model=CallLog)
+async def get_call(call_id: str):
+    """Return a single call record with its transcript."""
+    call = await call_log_service.get_call(call_id)
+    if not call:
+        raise HTTPException(status_code=404, detail="Call not found.")
+    return call
+
+
+# ---------------------------------------------------------------------------
+# Infrastructure endpoints
+# ---------------------------------------------------------------------------
 @app.get("/api/pool/status")
 async def pool_status():
     """Check the health of the agent pool."""
@@ -95,16 +196,17 @@ async def pool_status():
 
 @app.get("/api/health")
 async def health():
+    """Comprehensive health check for monitoring."""
     config_ok = all([
         os.getenv("LIVEKIT_URL"),
         os.getenv("LIVEKIT_API_KEY"),
         os.getenv("LIVEKIT_API_SECRET"),
         os.getenv("GOOGLE_CLOUD_PROJECT"),
-        os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
     ])
     return {
         "status": "ok",
-        "deploy_time": "2026-02-17T04:45:00Z (v1.1.16-SANITY)",
+        "version": "2.0.0",
         "config_ok": config_ok,
         "pool": agent_pool.status,
         "env_check": {
@@ -112,6 +214,9 @@ async def health():
             "has_lk_key": bool(os.getenv("LIVEKIT_API_KEY")),
             "has_lk_secret": bool(os.getenv("LIVEKIT_API_SECRET")),
             "has_gcp_project": bool(os.getenv("GOOGLE_CLOUD_PROJECT")),
-            "has_gcp_creds": bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
-        }
+            "has_gcp_creds": bool(
+                os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+                or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            ),
+        },
     }
