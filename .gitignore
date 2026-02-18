@@ -13,11 +13,13 @@ venv/
 .next/
 out/
 
-# Environment variables (NEVER commit these!)
+# Environment variables — NEVER commit to a public repo!
 .env
+.env.*
 .env.local
-.env.production
-.env.*.local
+.env.example
+.env.sample
+.env.template
 
 # Google Cloud credentials (SECURITY - NEVER COMMIT!)
 *credentials*.json
