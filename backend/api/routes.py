@@ -23,7 +23,7 @@ from models.agent import (
     AgentUpdateRequest,
     TokenResponse,
 )
-from models.call_log import CallLog, CallLogCreateRequest
+from models.call_log import CallLog, CallLogCreateRequest, LiveKitWebhookPayload
 from services.agent_service import agent_service
 from services.call_log_service import call_log_service
 from services.config_service import config_service
@@ -166,24 +166,59 @@ async def delete_agent(agent_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Call log endpoints (Sprint 4 will add LiveKit webhook here)
+# Call log endpoints
 # ---------------------------------------------------------------------------
 @app.get("/api/calls", response_model=List[CallLog])
 async def list_calls(
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
-    limit: int = Query(50, le=200),
+    status: Optional[str] = Query(None, description="Filter by status: completed, failed, no_answer"),
+    outcome: Optional[str] = Query(None, description="Filter by outcome: success, not_interested, etc."),
+    limit: int = Query(100, le=500),
 ):
-    """Return call history, optionally filtered by agent."""
-    return await call_log_service.list_calls(agent_id=agent_id, limit=limit)
+    """Return call history with optional filters."""
+    return await call_log_service.list_calls(
+        agent_id=agent_id, status=status, outcome=outcome, limit=limit
+    )
 
 
 @app.get("/api/calls/{call_id}", response_model=CallLog)
 async def get_call(call_id: str):
-    """Return a single call record with its transcript."""
+    """Return a single call record with its full transcript."""
     call = await call_log_service.get_call(call_id)
     if not call:
         raise HTTPException(status_code=404, detail="Call not found.")
     return call
+
+
+@app.delete("/api/calls/{call_id}", status_code=204)
+async def delete_call(call_id: str):
+    """Delete a call log record."""
+    deleted = await call_log_service.delete_call(call_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Call not found.")
+
+
+# ---------------------------------------------------------------------------
+# Sprint 4: LiveKit Webhook
+# ---------------------------------------------------------------------------
+@app.post("/api/webhooks/livekit", status_code=200)
+async def livekit_webhook(payload: LiveKitWebhookPayload):
+    """
+    Receive LiveKit server-side webhook events.
+
+    Configure this URL in your LiveKit project settings:
+      POST https://<your-backend>/api/webhooks/livekit
+
+    Handled events:
+      - room_finished: Creates a CallLog with duration and participant count.
+
+    All other events are acknowledged and ignored.
+    """
+    logger.info("🔔 LiveKit webhook received: event=%s", payload.event)
+    call = await call_log_service.process_livekit_webhook(payload)
+    if call:
+        return {"status": "ok", "call_id": call.id, "room": call.room_name}
+    return {"status": "ignored", "event": payload.event}
 
 
 # ---------------------------------------------------------------------------
@@ -239,12 +274,15 @@ async def health():
         os.getenv("GOOGLE_CLOUD_PROJECT"),
         os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
     ])
+    uptime_seconds = int(time.time() - _start_time)
     return {
         "status": "ok",
         "version": "2.0.0",
         "config_ok": config_ok,
+        "uptime_seconds": uptime_seconds,
         "pool": agent_pool.status,
         "config_cache": config_service.cache_stats,
+        "calls": call_log_service.stats,
         "env_check": {
             "has_lk_url": bool(os.getenv("LIVEKIT_URL")),
             "has_lk_key": bool(os.getenv("LIVEKIT_API_KEY")),
