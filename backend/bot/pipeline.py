@@ -24,6 +24,7 @@ from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 
 from models.agent import AgentConfig
+from services.knowledge_service import knowledge_service
 
 load_dotenv()
 
@@ -196,6 +197,31 @@ async def create_pipeline(
         first_message = _DEFAULT_GREETING
         bot_name      = "priya-bot"
         logger.info("🤖 Using default fallback config (no agent_config provided)")
+
+    # ── RAG: inject knowledge base context into system prompt ───────────────
+    if agent_config and agent_config.id:
+        try:
+            rag_results = await knowledge_service.search(
+                agent_id=agent_config.id,
+                query="general context about the business",
+                top_k=3,
+            )
+            if rag_results:
+                rag_context = "\n\n".join(
+                    f"[Source: {r.filename or 'document'}]\n{r.text}"
+                    for r in rag_results
+                )
+                system_prompt = (
+                    system_prompt
+                    + "\n\n---\nKNOWLEDGE BASE (use this to answer questions accurately):\n"
+                    + rag_context
+                )
+                logger.info(
+                    "📚 RAG: injected %d chunks into system prompt for agent=%s",
+                    len(rag_results), agent_config.id,
+                )
+        except Exception as rag_err:
+            logger.warning("⚠️  RAG injection failed (continuing without): %s", rag_err)
 
     logger.info("🚀 Creating pipeline for room: %s", room_name)
 

@@ -9,11 +9,12 @@ Architecture:
 
 import os
 import logging
+import time
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 
 from bot.pool import agent_pool, LIVEKIT_URL
@@ -24,9 +25,11 @@ from models.agent import (
     TokenResponse,
 )
 from models.call_log import CallLog, CallLogCreateRequest, LiveKitWebhookPayload
+from models.knowledge import KnowledgeDocument, KnowledgeSearchResult
 from services.agent_service import agent_service
 from services.call_log_service import call_log_service
 from services.config_service import config_service
+from services.knowledge_service import knowledge_service
 
 load_dotenv()
 
@@ -219,6 +222,83 @@ async def livekit_webhook(payload: LiveKitWebhookPayload):
     if call:
         return {"status": "ok", "call_id": call.id, "room": call.room_name}
     return {"status": "ignored", "event": payload.event}
+
+
+# ---------------------------------------------------------------------------
+# Sprint 5: Knowledge Base & RAG
+# ---------------------------------------------------------------------------
+@app.post("/api/agents/{agent_id}/knowledge", response_model=KnowledgeDocument, status_code=201)
+async def upload_document(
+    agent_id: str,
+    file: UploadFile = File(...),
+):
+    """
+    Upload a document (PDF or TXT) to an agent's knowledge base.
+
+    The document is chunked, embedded via Gemini text-embedding-004,
+    and stored in the in-memory vector store for RAG retrieval.
+    """
+    agent = await agent_service.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found.")
+
+    # Read file content
+    raw = await file.read()
+    content_type = file.content_type or "text/plain"
+
+    # Extract text
+    if content_type == "application/pdf" or (file.filename or "").endswith(".pdf"):
+        try:
+            import io
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(raw))
+            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        except ImportError:
+            raise HTTPException(
+                status_code=422,
+                detail="PDF support requires 'pypdf'. Install it with: pip install pypdf",
+            )
+    else:
+        text = raw.decode("utf-8", errors="replace")
+
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="Could not extract text from the uploaded file.")
+
+    doc = await knowledge_service.ingest(
+        agent_id=agent_id,
+        filename=file.filename or "document.txt",
+        text_content=text,
+        content_type=content_type,
+    )
+    logger.info("📚 Knowledge doc uploaded: agent=%s file=%s", agent_id, file.filename)
+    return doc
+
+
+@app.get("/api/agents/{agent_id}/knowledge", response_model=List[KnowledgeDocument])
+async def list_documents(agent_id: str):
+    """List all knowledge base documents for an agent."""
+    agent = await agent_service.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found.")
+    return await knowledge_service.list_documents(agent_id)
+
+
+@app.delete("/api/knowledge/{document_id}", status_code=204)
+async def delete_document(document_id: str):
+    """Delete a knowledge base document and all its chunks."""
+    deleted = await knowledge_service.delete_document(document_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+
+@app.get("/api/agents/{agent_id}/knowledge/search", response_model=List[KnowledgeSearchResult])
+async def search_knowledge(
+    agent_id: str,
+    q: str = Query(..., description="Search query"),
+    top_k: int = Query(3, le=10),
+):
+    """Semantic search over an agent's knowledge base."""
+    return await knowledge_service.search(agent_id=agent_id, query=q, top_k=top_k)
 
 
 # ---------------------------------------------------------------------------
