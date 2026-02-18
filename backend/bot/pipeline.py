@@ -18,6 +18,7 @@ from pipecat.frames.frames import TextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.services.google.gemini_live.llm_vertex import GeminiLiveVertexLLMService, InputParams
+from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 from google.genai.types import Modality
 from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -121,27 +122,57 @@ async def _create_gemini_service(
                 logger.warning("⚠️ Credentials file NOT FOUND: %s", creds_path)
                 creds_path = None
 
+            gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
             location = os.getenv("GOOGLE_CLOUD_LOCATION") or "us-central1"
-            logger.info(
-                "🧠 Service: location=%s, project=%s, voice=%s, model=%s",
-                location,
-                os.getenv("GOOGLE_CLOUD_PROJECT"),
-                voice_id,
-                model,
-            )
 
-            service = GeminiLiveVertexLLMService(
-                project_id=os.getenv("GOOGLE_CLOUD_PROJECT"),
-                location=location,
-                credentials=creds_json,
-                credentials_path=creds_path if not creds_json else None,
-                model=model,
-                system_instruction=system_prompt,
-                voice_id=voice_id,
-                params=InputParams(
-                    response_modalities=[Modality.AUDIO, Modality.TEXT],
-                ),
-            )
+            # ── Choose auth strategy ──────────────────────────────────────────
+            # Priority:
+            #   1. Vertex AI with service account JSON (production / Render)
+            #   2. Gemini API key (local dev — no service account needed)
+            use_vertex = bool(creds_json or creds_path)
+
+            if use_vertex:
+                logger.info(
+                    "🧠 Vertex AI: location=%s, project=%s, voice=%s, model=%s",
+                    location, os.getenv("GOOGLE_CLOUD_PROJECT"), voice_id, model,
+                )
+                service = GeminiLiveVertexLLMService(
+                    project_id=os.getenv("GOOGLE_CLOUD_PROJECT"),
+                    location=location,
+                    credentials=creds_json,
+                    credentials_path=creds_path if not creds_json else None,
+                    model=model,
+                    system_instruction=system_prompt,
+                    voice_id=voice_id,
+                    params=InputParams(
+                        response_modalities=[Modality.AUDIO, Modality.TEXT],
+                    ),
+                )
+            elif gemini_api_key:
+                # Map Vertex model names to Gemini API model names
+                api_model = model
+                if "live-001" in model:
+                    api_model = "models/gemini-2.0-flash-live-001"
+                elif "native-audio" in model:
+                    api_model = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+                logger.info(
+                    "🧠 Gemini API key: voice=%s, model=%s",
+                    voice_id, api_model,
+                )
+                service = GeminiLiveLLMService(
+                    api_key=gemini_api_key,
+                    model=api_model,
+                    system_instruction=system_prompt,
+                    voice_id=voice_id,
+                    params=InputParams(
+                        response_modalities=[Modality.AUDIO, Modality.TEXT],
+                    ),
+                )
+            else:
+                raise RuntimeError(
+                    "No Gemini credentials found. Set GEMINI_API_KEY (local dev) or "
+                    "GOOGLE_APPLICATION_CREDENTIALS_JSON (production)."
+                )
 
             logger.info("✅ Gemini service created (voice=%s, model=%s)", voice_id, model)
             return service
