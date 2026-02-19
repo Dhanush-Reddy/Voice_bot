@@ -7,9 +7,7 @@ Architecture:
 - Pydantic models in models/ define all request/response shapes.
 """
 
-import os
 import logging
-import time
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
@@ -24,7 +22,7 @@ from models.agent import (
     AgentUpdateRequest,
     TokenResponse,
 )
-from models.call_log import CallLog, CallLogCreateRequest, LiveKitWebhookPayload
+from models.call_log import CallLog, LiveKitWebhookPayload
 from models.knowledge import KnowledgeDocument, KnowledgeSearchResult
 from services.agent_service import agent_service
 from services.call_log_service import call_log_service
