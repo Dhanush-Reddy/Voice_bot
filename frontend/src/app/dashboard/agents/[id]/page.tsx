@@ -14,12 +14,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 
-// Required for Next.js static export — agent pages are rendered client-side
-// via the /* → /index.html SPA redirect in netlify.toml.
-export function generateStaticParams() {
-    return [];
-}
-
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
