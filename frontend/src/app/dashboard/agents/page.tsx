@@ -64,7 +64,7 @@ function AgentCard({ agent }: { agent: Agent }) {
                     Edit
                 </Link>
                 <Link
-                    href={`/?agent_id=${agent.id}`}
+                    href={`/try?agent_id=${agent.id}`}
                     className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-white bg-violet-600 hover:bg-violet-500 transition-colors"
                 >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -88,7 +88,7 @@ export default function AgentsPage() {
                 const res = await fetch(`${BACKEND_URL}/api/agents`);
                 if (!res.ok) throw new Error("Failed to load agents");
                 setAgents(await res.json());
-            } catch (err) {
+            } catch {
                 setError("Could not load agents. Is the backend running?");
             } finally {
                 setLoading(false);
