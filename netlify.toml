@@ -1,24 +1,23 @@
-# Netlify Configuration
+# Netlify Configuration — Next.js SSR via @netlify/plugin-nextjs
 [build]
   command = "npm run build"
-  publish = "out"
+  publish = ".next"
   base = "frontend"
 
 [build.environment]
   NODE_VERSION = "20"
   NEXT_TELEMETRY_DISABLED = "1"
 
-# Redirect rules
+# Next.js plugin handles routing — no manual redirects needed
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Proxy /api/* to the backend (Cloud Run)
 [[redirects]]
   from = "/api/*"
   to = "https://voice-backend-820513756722.europe-west1.run.app/api/:splat"
   status = 200
   force = true
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
 
 # Headers for security
 [[headers]]
@@ -27,9 +26,3 @@
     X-Frame-Options = "SAMEORIGIN"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-
-# Cache static assets
-[[headers]]
-  for = "/_next/static/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
