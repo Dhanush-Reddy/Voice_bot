@@ -1,18 +1,15 @@
-# CodeRabbit Configuration
-# Docs: https://docs.coderabbit.ai/guides/configure-coderabbit
-
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 version: "2"
 
 reviews:
-  # Auto-review all PRs
+  profile: "chill"
   auto_review:
     enabled: true
     drafts: false
-
-  # Focus areas for review
-  profile: "chill"  # Options: chill, assertive
-  
-  # Path-specific instructions
+    base_branches:
+      - "main"
+      - "coderabbitai/utg/1e8ddef"
+      - ".*"
   path_instructions:
     - path: "backend/**/*.py"
       instructions: |
@@ -22,7 +19,6 @@ reviews:
         - Verify Pydantic models are used for all request/response shapes.
         - Flag any bare `except:` clauses — always catch specific exceptions.
         - Ensure no secrets or API keys are hardcoded.
-
     - path: "frontend/src/**/*.tsx"
       instructions: |
         - Enforce TypeScript strict mode — no `any` types.
@@ -31,18 +27,6 @@ reviews:
         - Verify all API calls handle loading, error, and empty states.
         - Ensure all interactive elements have unique IDs for accessibility.
 
-    - path: "frontend/src/components/**"
-      instructions: |
-        - Components should be reusable and accept props rather than hardcoding values.
-        - Ensure consistent styling using the established design tokens.
-
-  # Ignore generated files
-  path_filters:
-    - "!**/__pycache__/**"
-    - "!**/.next/**"
-    - "!**/node_modules/**"
-    - "!**/*.lock"
-
 chat:
-  # Allow CodeRabbit to respond to comments
   auto_reply: true
+
