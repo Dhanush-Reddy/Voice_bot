@@ -37,7 +37,9 @@ class Settings:
 
         # ── Google Cloud / Gemini ─────────────────────────────────────────────
         self.google_cloud_project: str = os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
-        self.google_cloud_location: str = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1").strip()
+        self.google_cloud_location: str = os.getenv(
+            "GOOGLE_CLOUD_LOCATION", "us-central1"
+        ).strip()
 
         # Credentials — resolve once, in priority order:
         #   1. Inline JSON string  (GOOGLE_APPLICATION_CREDENTIALS_JSON)  ← production
@@ -51,15 +53,20 @@ class Settings:
         )
 
         # ── App ───────────────────────────────────────────────────────────────
-        self.agent_pool_size: int = int(os.getenv("AGENT_POOL_SIZE", "3"))
+        self.agent_pool_size: int = self._parse_int("AGENT_POOL_SIZE", 3)
+        self.default_bot_voice: str = os.getenv("BOT_VOICE", "Aoede").strip()
+        self.default_bot_model: str = os.getenv("BOT_MODEL", "gemini-2.0-flash-live-001").strip()
+        self.database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./voice.db")
         self.start_time: float = time.time()
 
         # ── Derived flags ─────────────────────────────────────────────────────
-        self.livekit_configured: bool = all([
-            self.livekit_url,
-            self.livekit_api_key,
-            self.livekit_api_secret,
-        ])
+        self.livekit_configured: bool = all(
+            [
+                self.livekit_url,
+                self.livekit_api_key,
+                self.livekit_api_secret,
+            ]
+        )
         self.gemini_configured: bool = bool(
             self.google_credentials_json or self.gemini_api_key
         )
@@ -68,6 +75,17 @@ class Settings:
         self._log_startup()
 
     # ── Private helpers ───────────────────────────────────────────────────────
+
+    def _parse_int(self, key: str, default: int) -> int:
+        """Defensively parse integer environment variables."""
+        raw = os.getenv(key)
+        if raw is None:
+            return default
+        try:
+            return int(raw)
+        except ValueError:
+            logger.info("⚠️  Invalid %s: '%s'. Using default: %d", key, raw, default)
+            return default
 
     def _resolve_credentials_json(self) -> str | None:
         """
@@ -81,7 +99,9 @@ class Settings:
                 json.loads(raw)  # validate it's real JSON
                 return raw
             except json.JSONDecodeError:
-                logger.warning("⚠️  GOOGLE_APPLICATION_CREDENTIALS_JSON is not valid JSON — ignoring")
+                logger.warning(
+                    "⚠️  GOOGLE_APPLICATION_CREDENTIALS_JSON is not valid JSON — ignoring"
+                )
 
         # 2. File path
         path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
@@ -92,9 +112,13 @@ class Settings:
                     data = json.loads(p.read_text())
                     return json.dumps(data)  # normalise to single-line
                 except Exception as exc:
-                    logger.warning("⚠️  Could not read credentials file %s: %s", path, exc)
+                    logger.warning(
+                        "⚠️  Could not read credentials file %s: %s", path, exc
+                    )
             else:
-                logger.warning("⚠️  GOOGLE_APPLICATION_CREDENTIALS path not found: %s", path)
+                logger.warning(
+                    "⚠️  GOOGLE_APPLICATION_CREDENTIALS path not found: %s", path
+                )
 
         return None
 
@@ -123,9 +147,9 @@ class Settings:
         logger.info(
             "⚙️  Config loaded | LiveKit: %s | Gemini creds: %s | Pool size: %d",
             "✅" if self.livekit_configured else "❌ MISSING",
-            "✅ service-account" if self.google_credentials_json else (
-                "✅ api-key" if self.gemini_api_key else "❌ MISSING"
-            ),
+            "✅ service-account"
+            if self.google_credentials_json
+            else ("✅ api-key" if self.gemini_api_key else "❌ MISSING"),
             self.agent_pool_size,
         )
 

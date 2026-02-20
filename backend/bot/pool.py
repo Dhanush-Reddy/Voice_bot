@@ -18,7 +18,9 @@ LIVEKIT_API_SECRET = settings.livekit_api_secret
 POOL_SIZE = settings.agent_pool_size
 
 # Health check constants
-AGENT_STARTUP_TIME = 5.0  # seconds to wait for agent to start (increased for cloud reliability)
+AGENT_STARTUP_TIME = (
+    5.0  # seconds to wait for agent to start (increased for cloud reliability)
+)
 AGENT_HEALTH_CHECK_INTERVAL = 10.0  # seconds between health checks
 MAX_AGENT_AGE = 600  # 10 minutes max age before recycling
 
@@ -26,6 +28,7 @@ MAX_AGENT_AGE = 600  # 10 minutes max age before recycling
 @dataclass
 class PooledAgent:
     """A pre-warmed agent sitting in a LiveKit room, waiting for a user."""
+
     room_name: str
     agent_id: Optional[str] = None
     process: Optional[asyncio.subprocess.Process] = None
@@ -62,7 +65,9 @@ class AgentPool:
             self._health_check_task = asyncio.create_task(self._health_monitor())
             return
 
-        logger.info(f"🚀 [BULLETPROOF] Starting agent pool with {self.pool_size} slots…")
+        logger.info(
+            f"🚀 [BULLETPROOF] Starting agent pool with {self.pool_size} slots…"
+        )
 
         # Spawn all agents concurrently
         tasks = [self._spawn_agent() for _ in range(self.pool_size)]
@@ -90,36 +95,43 @@ class AgentPool:
         while self._running:
             try:
                 await asyncio.sleep(AGENT_HEALTH_CHECK_INTERVAL)
-                
+
                 if not self._running:
                     break
 
                 # Check all agents
                 dead_agents = []
                 for agent in self._all_agents:
-                    # Check if process is still alive
+                    # 1. Check if process is still alive
                     if agent.process and agent.process.returncode is not None:
-                        logger.warning(f"⚠️ Agent in room {agent.room_name} died (code: {agent.process.returncode})")
+                        logger.warning(
+                            f"⚠️ Agent in room {agent.room_name} died (code: {agent.process.returncode})"
+                        )
                         dead_agents.append(agent)
-                    
-                    # Check agent age
+                        continue  # Skip age check if already dead
+
+                    # 2. Check agent age
                     age = time.time() - agent.created_at
                     if age > MAX_AGENT_AGE:
-                        logger.info(f"⏰ Agent in room {agent.room_name} reached max age ({age:.0f}s), recycling...")
+                        logger.info(
+                            f"⏰ Agent in room {agent.room_name} reached max age ({age:.0f}s), recycling..."
+                        )
                         dead_agents.append(agent)
 
                 # Remove dead agents and replenish
                 for agent in dead_agents:
                     await self._remove_agent(agent)
-                    
+
                 # Replenish pool if needed based on ACTUAL tracked agents
                 current_count = len(self._all_agents)
                 if current_count < self.pool_size:
                     needed = self.pool_size - current_count
-                    logger.info(f"🔄 Replenishing pool: {needed} agents needed (current healthy/total: {current_count})")
+                    logger.info(
+                        f"🔄 Replenishing pool: {needed} agents needed (current healthy/total: {current_count})"
+                    )
                     for _ in range(needed):
                         asyncio.create_task(self._replenish())
-                        
+
             except Exception as e:
                 logger.error(f"❌ Health monitor error: {e}")
 
@@ -128,14 +140,14 @@ class AgentPool:
         try:
             if agent in self._all_agents:
                 self._all_agents.remove(agent)
-            
+
             if agent.process and agent.process.returncode is None:
                 agent.process.terminate()
                 try:
                     await asyncio.wait_for(agent.process.wait(), timeout=3)
                 except asyncio.TimeoutError:
                     agent.process.kill()
-                    
+
             logger.info(f"🗑️ Removed dead agent from room {agent.room_name}")
         except Exception as e:
             logger.error(f"❌ Error removing agent: {e}")
@@ -161,14 +173,17 @@ class AgentPool:
 
                     logger.info(
                         "⚡ Popped agent from pool (room=%s), %d remaining",
-                        agent.room_name, self._ready_agents.qsize(),
+                        agent.room_name,
+                        self._ready_agents.qsize(),
                     )
                     # Replenish in background
                     asyncio.create_task(self._replenish())
                     return agent
                 else:
                     # Agent died, remove it and continue draining
-                    logger.warning("⚠️ Skipping dead agent in queue (room=%s)", agent.room_name)
+                    logger.warning(
+                        "⚠️ Skipping dead agent in queue (room=%s)", agent.room_name
+                    )
                     await self._remove_agent(agent)
             except asyncio.QueueEmpty:
                 break
@@ -207,7 +222,7 @@ class AgentPool:
             # Double-check ACTUAL tracked agents count
             if len(self._all_agents) >= self.pool_size:
                 return
-                
+
             agent = await self._spawn_agent()
             if isinstance(agent, PooledAgent):
                 await self._ready_agents.put(agent)
@@ -216,7 +231,7 @@ class AgentPool:
                     f"🔄 Pool replenished (room={agent.room_name}), {self._ready_agents.qsize()} ready"
                 )
 
-    async def _stream_logs(self, stream, label, room_name):
+    async def _stream_logs(self, stream, label, room_name) -> None:
         """Streams subprocess pipe to the main logger."""
         logger.info(f"📡 Started log streaming for {room_name} ({label})")
         try:
@@ -244,13 +259,19 @@ class AgentPool:
             try:
                 logger.info(
                     "🤖 Spawning agent for room %s (attempt %d, agent_id=%s)…",
-                    room_name, attempt, agent_id,
+                    room_name,
+                    attempt,
+                    agent_id,
                 )
 
                 import sys
+
                 cmd = [
-                    sys.executable, "-m", "bot.runner",
-                    "--room", room_name,
+                    sys.executable,
+                    "-m",
+                    "bot.runner",
+                    "--room",
+                    room_name,
                 ]
                 if agent_id:
                     cmd += ["--agent-id", agent_id]
@@ -273,12 +294,16 @@ class AgentPool:
 
                 # Check if process is still alive
                 if proc.returncode is not None:
-                    logger.error("❌ Agent process died immediately (code: %d)", proc.returncode)
+                    logger.error(
+                        "❌ Agent process died immediately (code: %d)", proc.returncode
+                    )
                     if attempt < max_attempts:
                         await asyncio.sleep(1)
                         continue
                     else:
-                        raise RuntimeError(f"Agent failed to start after {max_attempts} attempts")
+                        raise RuntimeError(
+                            f"Agent failed to start after {max_attempts} attempts"
+                        )
 
                 agent.ready = True
                 agent.health_check_passed = True
@@ -314,14 +339,14 @@ class AgentPool:
     async def shutdown(self) -> None:
         """Cleanup — terminate all bot workers."""
         self._running = False
-        
+
         if self._health_check_task:
             self._health_check_task.cancel()
             try:
                 await self._health_check_task
             except asyncio.CancelledError:
                 pass
-        
+
         logger.info("Shutting down agent pool…")
         for agent in self._all_agents:
             if agent.process and agent.process.returncode is None:
@@ -346,7 +371,7 @@ class AgentPool:
                 "has_url": bool(settings.livekit_url),
                 "has_key": bool(settings.livekit_api_key),
                 "has_secret": bool(settings.livekit_api_secret),
-            }
+            },
         }
 
 

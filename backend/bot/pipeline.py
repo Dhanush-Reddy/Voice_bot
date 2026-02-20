@@ -10,18 +10,21 @@ import os
 import asyncio
 import logging
 import time
-from typing import Optional
+from datetime import datetime
+from typing import List, Optional, Union, Dict
 
 from livekit.api import AccessToken, VideoGrants
-from pipecat.frames.frames import TextFrame
-from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.services.google.gemini_live.llm_vertex import GeminiLiveVertexLLMService, InputParams
-from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
-from google.genai.types import Modality
+from pipecat.frames.frames import TextFrame, TranscriptionFrame
+from pipecat.processors.transcript_processor import TranscriptProcessor
 from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.frames.frames import Frame, TextFrame, TranscriptionFrame
+
+from pipecat.services.google import GeminiLiveLLMService, GeminiLiveVertexLLMService
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.task import PipelineParams, PipelineTask
 
 from core.config import settings
 from models.agent import AgentConfig
@@ -37,14 +40,16 @@ LIVEKIT_API_SECRET = settings.livekit_api_secret
 if LIVEKIT_URL:
     logger.info(
         "📡 LiveKit Config: URL_len=%d, Key_len=%d, Secret_len=%d",
-        len(LIVEKIT_URL), len(LIVEKIT_API_KEY), len(LIVEKIT_API_SECRET),
+        len(LIVEKIT_URL),
+        len(LIVEKIT_API_KEY),
+        len(LIVEKIT_API_SECRET),
     )
 
 # Configuration constants
 MAX_RETRY_ATTEMPTS = 3
-RETRY_DELAY = 2.0          # seconds
-GEMINI_TIMEOUT = 30.0      # seconds
-STARTUP_GRACE_PERIOD = 0.2 # seconds
+RETRY_DELAY = 2.0  # seconds
+GEMINI_TIMEOUT = 30.0  # seconds
+STARTUP_GRACE_PERIOD = 0.2  # seconds
 
 # ---------------------------------------------------------------------------
 # Default fallback prompt — used only when no AgentConfig is found
@@ -75,13 +80,22 @@ RESPONSE STYLE:
 """
 
 _DEFAULT_GREETING = "Hello! Namaste! Namaskaram! Vanakkam! Namaskara! Konnichiwa! Nenu Priya. How can I help you today?"
-_DEFAULT_VOICE = "Aoede"
-_DEFAULT_MODEL = "gemini-2.0-flash-live-001"
+_DEFAULT_VOICE = settings.default_bot_voice
+_DEFAULT_MODEL = settings.default_bot_model
+
+
+# ── Model Mapping ─────────────────────────────────────────────────────────────
+# Maps Vertex AI model names to Gemini API names
+VERTEX_TO_API_MODEL_MAP: Dict[str, str] = {
+    "gemini-2.0-flash-live-001": "gemini-2.0-flash-exp",
+    "gemini-2.5-flash-preview-native-audio-dialog": "gemini-2.5-flash-native-audio-preview-12-2025",
+}
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _generate_bot_token(room_name: str, bot_name: str = "priya-bot") -> str:
     """Generate a LiveKit access token for the bot participant."""
@@ -98,7 +112,7 @@ async def _create_gemini_service(
     system_prompt: str,
     voice_id: str,
     model: str,
-) -> GeminiLiveVertexLLMService:
+) -> Union[GeminiLiveLLMService, GeminiLiveVertexLLMService]:
     """
     Create a Gemini Live service with retry logic.
 
@@ -109,7 +123,9 @@ async def _create_gemini_service(
 
     for attempt in range(1, MAX_RETRY_ATTEMPTS + 1):
         try:
-            logger.info("🧠 Gemini connection attempt %d/%d…", attempt, MAX_RETRY_ATTEMPTS)
+            logger.info(
+                "🧠 Gemini connection attempt %d/%d…", attempt, MAX_RETRY_ATTEMPTS
+            )
 
             creds_json = settings.google_credentials_json
             gemini_api_key = settings.gemini_api_key
@@ -121,42 +137,53 @@ async def _create_gemini_service(
             #   2. Gemini API key (local dev — no service account needed)
             use_vertex = bool(creds_json)
 
+            # ── Model Mapping ──────────────────────────────────────────
+            # Normalize model names to ensure compatibility with Multimodal Live API
+            mapped_model = VERTEX_TO_API_MODEL_MAP.get(model, model)
+            
+            # 💡 SPECIAL FALLBACK FOR VERTEX AI
+            if use_vertex and "2.0" in mapped_model:
+                # If 2.0 is not supported in the project yet for Live API, try the verified native-audio ID
+                vertex_model = "google/gemini-live-2.5-flash-native-audio"
+            else:
+                vertex_model = mapped_model
+
             if use_vertex:
                 logger.info(
                     "🧠 Vertex AI: location=%s, project=%s, voice=%s, model=%s",
-                    location, settings.google_cloud_project, voice_id, model,
+                    location,
+                    settings.google_cloud_project,
+                    voice_id,
+                    vertex_model,
                 )
                 service = GeminiLiveVertexLLMService(
                     project_id=settings.google_cloud_project,
                     location=location,
                     credentials=creds_json,
-                    credentials_path=None,
-                    model=model,
+                    model=vertex_model,
                     system_instruction=system_prompt,
                     voice_id=voice_id,
-                    params=InputParams(
-                        response_modalities=[Modality.AUDIO, Modality.TEXT],
-                    ),
+                    transcribe_user=True,
+                    transcribe_assistant=True,
                 )
             elif gemini_api_key:
-                # Map Vertex model names to Gemini API model names
-                api_model = model
-                if "live-001" in model:
-                    api_model = "models/gemini-2.0-flash-live-001"
-                elif "native-audio" in model:
-                    api_model = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+                # Gemini API (AI Studio) requires 'models/' prefix
+                api_studio_model = mapped_model
+                if not api_studio_model.startswith("models/"):
+                    api_studio_model = f"models/{api_studio_model}"
+
                 logger.info(
                     "🧠 Gemini API key: voice=%s, model=%s",
-                    voice_id, api_model,
+                    voice_id,
+                    api_studio_model,
                 )
                 service = GeminiLiveLLMService(
                     api_key=gemini_api_key,
-                    model=api_model,
+                    model=api_studio_model,
                     system_instruction=system_prompt,
                     voice_id=voice_id,
-                    params=InputParams(
-                        response_modalities=[Modality.AUDIO, Modality.TEXT],
-                    ),
+                    transcribe_user=True,
+                    transcribe_assistant=True,
                 )
             else:
                 raise RuntimeError(
@@ -164,7 +191,9 @@ async def _create_gemini_service(
                     "GOOGLE_APPLICATION_CREDENTIALS_JSON (production)."
                 )
 
-            logger.info("✅ Gemini service created (voice=%s, model=%s)", voice_id, model)
+            logger.info(
+                "✅ Gemini service created (voice=%s, model=%s)", voice_id, model
+            )
             return service
 
         except Exception as exc:
@@ -183,9 +212,11 @@ async def _create_gemini_service(
 # Public API
 # ---------------------------------------------------------------------------
 
+
 async def create_pipeline(
     room_name: str,
     agent_config: Optional[AgentConfig] = None,
+    transcript_data: Optional[list] = None,
 ) -> tuple[PipelineTask, LiveKitTransport]:
     """
     Build and return the Pipecat pipeline task.
@@ -194,29 +225,30 @@ async def create_pipeline(
         room_name:    The LiveKit room to join.
         agent_config: Dynamic agent configuration fetched from ConfigService.
                       Falls back to the hardcoded default if None.
-
-    Returns:
-        (PipelineTask, LiveKitTransport) ready to run.
+        transcript_data: A list to collect (role, content, timestamp) tuples.
     """
     start_time = time.time()
 
     # ── Resolve config ──────────────────────────────────────────────────────
     if agent_config:
         system_prompt = agent_config.system_prompt
-        voice_id      = agent_config.voice_id
-        model         = agent_config.model
+        voice_id = agent_config.voice_id
+        model = agent_config.model
         first_message = agent_config.first_message or _DEFAULT_GREETING
-        bot_name      = f"agent-{agent_config.id[:8]}"
+        bot_name = f"agent-{agent_config.id[:8]}"
         logger.info(
             "🤖 Using dynamic config: agent=%s name=%s voice=%s model=%s",
-            agent_config.id, agent_config.name, voice_id, model,
+            agent_config.id,
+            agent_config.name,
+            voice_id,
+            model,
         )
     else:
         system_prompt = _DEFAULT_SYSTEM_PROMPT
-        voice_id      = os.getenv("BOT_VOICE", _DEFAULT_VOICE)
-        model         = os.getenv("BOT_MODEL", _DEFAULT_MODEL)
+        voice_id = _DEFAULT_VOICE
+        model = _DEFAULT_MODEL
         first_message = _DEFAULT_GREETING
-        bot_name      = "priya-bot"
+        bot_name = "priya-bot"
         logger.info("🤖 Using default fallback config (no agent_config provided)")
 
     # ── RAG: inject knowledge base context into system prompt ───────────────
@@ -239,7 +271,8 @@ async def create_pipeline(
                 )
                 logger.info(
                     "📚 RAG: injected %d chunks into system prompt for agent=%s",
-                    len(rag_results), agent_config.id,
+                    len(rag_results),
+                    agent_config.id,
                 )
         except Exception as rag_err:
             logger.warning("⚠️  RAG injection failed (continuing without): %s", rag_err)
@@ -275,10 +308,48 @@ async def create_pipeline(
     # ── Gemini service ──────────────────────────────────────────────────────
     gemini_live_service = await _create_gemini_service(system_prompt, voice_id, model)
 
+    # ── Custom Transcript Collector ─────────────────────────────────────────
+    class TranscriptCollector(FrameProcessor):
+        def __init__(self, transcript_list):
+            super().__init__()
+            self._transcript_list = transcript_list
+
+        async def process_frame(self, frame: Frame, direction: FrameDirection):
+            # ⚠️ CRITICAL: Must call super() to track StartFrame/Pipeline state
+            await super().process_frame(frame, direction)
+
+            if isinstance(frame, TranscriptionFrame):
+                self._transcript_list.append({
+                    "role": "user",
+                    "content": frame.text,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                logger.debug(f"📝 User transcript collected: {frame.text}")
+            elif isinstance(frame, TextFrame):
+                # Only collect assistant text if it has content
+                if frame.text.strip():
+                    self._transcript_list.append({
+                        "role": "assistant",
+                        "content": frame.text,
+                        "timestamp": datetime.utcnow().isoformat()
+                    })
+                    logger.debug(f"📝 Assistant transcript collected: {frame.text}")
+
+            await self.push_frame(frame, direction)
+
+    transcript_collector = TranscriptCollector(transcript_data)
+
     # ── Pipeline ────────────────────────────────────────────────────────────
     logger.info("🔧 Creating pipeline…")
     try:
-        pipeline = Pipeline([transport.input(), gemini_live_service, transport.output()])
+        pipeline = Pipeline(
+            [
+                transport.input(),
+                gemini_live_service,
+                transcript_collector,
+                transport.output()
+            ]
+        )
         logger.info("✅ Pipeline created")
     except Exception as exc:
         logger.error("❌ Failed to create pipeline: %s", exc)
@@ -302,16 +373,18 @@ async def create_pipeline(
     # ── Event handlers ──────────────────────────────────────────────────────
     output_transport = transport.output()
 
-    @output_transport.event_handler("on_bot_started_speaking")
-    async def on_bot_started_speaking() -> None:
-        logger.debug("🗣️ Bot STARTED speaking")
+    @output_transport.event_handler("on_started_speaking")
+    async def on_started_speaking() -> None:
+        logger.info("🗣️ Bot STARTED speaking")
 
-    @output_transport.event_handler("on_bot_stopped_speaking")
-    async def on_bot_stopped_speaking() -> None:
-        logger.debug("🤐 Bot STOPPED speaking")
+    @output_transport.event_handler("on_stopped_speaking")
+    async def on_stopped_speaking() -> None:
+        logger.info("🤐 Bot STOPPED speaking")
 
     @gemini_live_service.event_handler("on_error")
-    async def on_llm_error(service: GeminiLiveVertexLLMService, error: Exception) -> None:
+    async def on_llm_error(
+        service: Union[GeminiLiveLLMService, GeminiLiveVertexLLMService], error: Exception
+    ) -> None:
         logger.error("❌ Gemini LLM Error: %s", error)
 
     # ── Greeting on participant join ─────────────────────────────────────────
@@ -322,7 +395,11 @@ async def create_pipeline(
         nonlocal greeting_sent
 
         try:
-            identity = participant.identity if hasattr(participant, "identity") else str(participant)
+            identity = (
+                participant.identity
+                if hasattr(participant, "identity")
+                else str(participant)
+            )
         except Exception:
             identity = str(participant)
 
@@ -338,7 +415,11 @@ async def create_pipeline(
             return
 
         greeting_sent = True
-        logger.info("👤 User joined room %s — waiting %.1fs for stability…", room_name, STARTUP_GRACE_PERIOD)
+        logger.info(
+            "👤 User joined room %s — waiting %.1fs for stability…",
+            room_name,
+            STARTUP_GRACE_PERIOD,
+        )
         await asyncio.sleep(STARTUP_GRACE_PERIOD)
 
         for attempt in range(1, 4):

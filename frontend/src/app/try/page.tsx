@@ -2,8 +2,13 @@
 
 import { useState, useCallback, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import VoiceAssistant from "@/components/VoiceAssistant";
+import dynamic from "next/dynamic";
 import Link from "next/link";
+
+const VoiceAssistant = dynamic(() => import("@/components/VoiceAssistant"), {
+    ssr: false,
+    loading: () => <div className="animate-pulse text-slate-400">Loading Assistant...</div>
+});
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
@@ -21,30 +26,46 @@ function TryNowContent() {
 
     // PRE-FETCH TOKEN & CONNECT ON MOUNT (Instant-On Optimization)
     useEffect(() => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
         const prefetch = async () => {
             try {
-                // If no agentId, we might want to use a 'default' or redirect back
-                const url = agentId 
+                const url = agentId
                     ? `${BACKEND_URL}/api/token?participant_name=User&agent_id=${agentId}`
                     : `${BACKEND_URL}/api/token?participant_name=User`;
 
-                const res = await fetch(url);
+                const res = await fetch(url, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
                 if (!res.ok) throw new Error("Pre-fetch failed");
                 const data = await res.json();
                 setToken(data.token);
                 setLivekitUrl(data.url);
                 console.log("⚡ [PRO] Session pre-warmed & ready for instant connect");
             } catch (err) {
-                console.error("Failed to pre-warm session:", err);
-                setError("Failed to initialize session. Is the backend running?");
+                if (err instanceof Error && err.name === 'AbortError') {
+                    console.error("❌ [PRO] Session pre-warm timed out");
+                    setError("Initialization timed out. Check your connection.");
+                } else {
+                    console.error("❌ [PRO] Failed to pre-warm session:", err);
+                    setError("Failed to initialize session. Is the backend running?");
+                }
             }
         };
         prefetch();
+        return () => controller.abort();
     }, [agentId]);
 
     const handleConnect = useCallback(async () => {
-        setConnectionState("connected");
-        console.log("🚀 [PRO] Instant connect triggered");
+        setConnectionState("connecting");
+        console.log("🚀 [PRO] Connecting to session...");
+
+        // Brief delay to allow UI state to update before mounting VoiceAssistant
+        setTimeout(() => {
+            setConnectionState("connected");
+            console.log("✅ [PRO] Connected to session");
+        }, 500);
     }, []);
 
     const handleDisconnect = useCallback(() => {
