@@ -28,6 +28,8 @@ from services.agent_service import agent_service
 from services.call_log_service import call_log_service
 from services.config_service import config_service
 from services.knowledge_service import knowledge_service
+from models.options import ConfigOptionsResponse
+from core.options import VOICE_OPTIONS, MODEL_OPTIONS, LANGUAGE_OPTIONS
 
 logger = logging.getLogger(__name__)
 
