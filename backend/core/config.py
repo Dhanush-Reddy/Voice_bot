@@ -31,6 +31,11 @@ class Settings:
 
     def __init__(self) -> None:
         # ── LiveKit ───────────────────────────────────────────────────────────
+        """
+        Initialize the Settings instance by reading and validating environment-derived configuration.
+        
+        Reads LiveKit and Google Cloud/Gemini settings from environment variables, resolves Google credentials (preferring inline JSON, then a file path, then an API key), parses AGENT_POOL_SIZE with a fallback to 3 (logs a warning on parse failure), records initialization time, computes derived flags (`livekit_configured`, `gemini_configured`), and runs validation and startup logging.
+        """
         self.livekit_url: str = os.getenv("LIVEKIT_URL", "").strip().rstrip("/")
         self.livekit_api_key: str = os.getenv("LIVEKIT_API_KEY", "").strip()
         self.livekit_api_secret: str = os.getenv("LIVEKIT_API_SECRET", "").strip()

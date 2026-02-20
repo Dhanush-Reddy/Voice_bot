@@ -36,6 +36,11 @@ interface HealthData {
 
 
 
+/**
+ * Render the dashboard page showing agent and call statistics, recent agents and calls, backend health status, and navigation links.
+ *
+ * @returns The page's JSX element that displays totals and derived metrics, recent items (agents and calls), a backend offline banner when applicable, and quick navigation tiles.
+ */
 export default function DashboardPage() {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [calls, setCalls] = useState<CallLog[]>([]);
