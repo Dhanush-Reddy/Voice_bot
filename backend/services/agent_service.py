@@ -1,16 +1,12 @@
-"""
-AgentService — business logic for managing agent configurations.
-
-This service is the single source of truth for agent data. It currently
-uses an in-memory store (for Sprint 1) and will be swapped for a Supabase
-repository in Sprint 3 without changing any callers.
-"""
-
 import uuid
 import logging
 from typing import Optional, List
+from sqlalchemy import select, update, delete
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.agent import AgentConfig, AgentCreateRequest, AgentUpdateRequest
+from models.database_models import Agent as AgentModel
+from core.database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -23,50 +19,92 @@ Keep your responses concise and conversational — this is a voice call.
 Do not use markdown, bullet points, or special characters in your responses.
 """
 
-_DEFAULT_AGENT = AgentConfig(
-    id="default",
-    name="Default Assistant",
-    system_prompt=_DEFAULT_SYSTEM_PROMPT,
-    voice_id="Aoede",
-    model="gemini-2.0-flash-live-001",
-    language="en-US",
-    vad_min_volume=0.15,
-    is_active=True,
-)
-
-# In-memory store: { agent_id -> AgentConfig }
-# Sprint 3 will replace this with a Supabase-backed repository.
-_agent_store: dict[str, AgentConfig] = {
-    _DEFAULT_AGENT.id: _DEFAULT_AGENT,
-}
-
-
 class AgentService:
     """
-    Handles all CRUD operations for agent configurations.
-
-    Design principle: All methods are async so the implementation can be
-    swapped for async DB calls (Supabase) in Sprint 3 without changing callers.
+    Handles all CRUD operations for agent configurations via SQLAlchemy.
     """
 
-    async def get_agent(self, agent_id: str) -> Optional[AgentConfig]:
+    def _to_pydantic(self, model: AgentModel) -> AgentConfig:
+        """Helper to convert SQLAlchemy model to Pydantic AgentConfig."""
+        return AgentConfig(
+            id=model.id,
+            name=model.name,
+            system_prompt=model.system_prompt,
+            voice_id=model.voice_id,
+            model=model.model,
+            language=model.language,
+            vad_min_volume=model.vad_min_volume,
+            is_active=model.is_active,
+            temperature=model.temperature,
+            success_outcomes=model.success_outcomes,
+            handoff_number=model.handoff_number,
+            first_message=model.first_message,
+        )
+
+    async def get_agent(self, agent_id: str, db: Optional[AsyncSession] = None) -> Optional[AgentConfig]:
         """Fetch a single agent by ID. Returns None if not found."""
-        agent = _agent_store.get(agent_id)
+        if db is None:
+            async with AsyncSessionLocal() as session:
+                return await self.get_agent(agent_id, session)
+
+        result = await db.execute(select(AgentModel).where(AgentModel.id == agent_id))
+        model = result.scalar_one_or_none()
+        return self._to_pydantic(model) if model else None
+
+    async def get_default_agent(self, db: Optional[AsyncSession] = None) -> AgentConfig:
+        """Return the default agent config. Seeds it if missing."""
+        agent = await self.get_agent("default", db)
         if not agent:
-            logger.warning("Agent not found: %s", agent_id)
+            # Seed default agent if not exists
+            agent = await self.seed_default_agent(db)
         return agent
 
-    async def get_default_agent(self) -> AgentConfig:
-        """Return the default agent config (backward-compatible fallback)."""
-        return _DEFAULT_AGENT
+    async def seed_default_agent(self, db: Optional[AsyncSession] = None) -> AgentConfig:
+        """Ensure a default agent exists in the database."""
+        if db is None:
+            async with AsyncSessionLocal() as session:
+                return await self.seed_default_agent(session)
 
-    async def list_agents(self) -> List[AgentConfig]:
-        """Return all agents in the store."""
-        return list(_agent_store.values())
+        # Check if "default" exists
+        existing = await self.get_agent("default", db)
+        if existing:
+            return existing
 
-    async def create_agent(self, request: AgentCreateRequest) -> AgentConfig:
-        """Create a new agent and persist it."""
-        agent = AgentConfig(
+        logger.info("🌱 Seeding default agent into database...")
+        default_model = AgentModel(
+            id="default",
+            name="Default Assistant",
+            system_prompt=_DEFAULT_SYSTEM_PROMPT,
+            voice_id="Aoede",
+            model="gemini-2.0-flash-live-001",
+            language="en-US",
+            vad_min_volume=0.15,
+            is_active=True,
+            temperature=0.7,
+            success_outcomes=["Appointment Booked"]
+        )
+        db.add(default_model)
+        await db.commit()
+        await db.refresh(default_model)
+        return self._to_pydantic(default_model)
+
+    async def list_agents(self, db: Optional[AsyncSession] = None) -> List[AgentConfig]:
+        """Return all agents in the database."""
+        if db is None:
+            async with AsyncSessionLocal() as session:
+                return await self.list_agents(session)
+
+        result = await db.execute(select(AgentModel).order_by(AgentModel.created_at.desc()))
+        models = result.scalars().all()
+        return [self._to_pydantic(m) for m in models]
+
+    async def create_agent(self, request: AgentCreateRequest, db: Optional[AsyncSession] = None) -> AgentConfig:
+        """Create a new agent and persist it to the database."""
+        if db is None:
+            async with AsyncSessionLocal() as session:
+                return await self.create_agent(request, session)
+
+        model = AgentModel(
             id=str(uuid.uuid4()),
             name=request.name,
             system_prompt=request.system_prompt,
@@ -78,36 +116,50 @@ class AgentService:
             handoff_number=request.handoff_number,
             first_message=request.first_message,
         )
-        _agent_store[agent.id] = agent
-        logger.info("✅ Created agent: %s (%s)", agent.name, agent.id)
-        return agent
+        db.add(model)
+        await db.commit()
+        await db.refresh(model)
+        logger.info("✅ Created agent in DB: %s (%s)", model.name, model.id)
+        return self._to_pydantic(model)
 
     async def update_agent(
-        self, agent_id: str, request: AgentUpdateRequest
+        self, agent_id: str, request: AgentUpdateRequest, db: Optional[AsyncSession] = None
     ) -> Optional[AgentConfig]:
-        """Update an existing agent's configuration."""
-        agent = _agent_store.get(agent_id)
-        if not agent:
+        """Update an existing agent's configuration in the database."""
+        if db is None:
+            async with AsyncSessionLocal() as session:
+                return await self.update_agent(agent_id, request, session)
+
+        result = await db.execute(select(AgentModel).where(AgentModel.id == agent_id))
+        model = result.scalar_one_or_none()
+        if not model:
             return None
 
-        # Apply only the fields that were provided (partial update)
-        updated_data = agent.model_dump()
-        for field, value in request.model_dump(exclude_none=True).items():
-            updated_data[field] = value
+        # Apply only provided fields
+        data = request.model_dump(exclude_none=True)
+        for key, value in data.items():
+            setattr(model, key, value)
 
-        updated_agent = AgentConfig(**updated_data)
-        _agent_store[agent_id] = updated_agent
-        logger.info("✏️ Updated agent: %s", agent_id)
-        return updated_agent
+        await db.commit()
+        await db.refresh(model)
+        logger.info("✏️ Updated agent in DB: %s", agent_id)
+        return self._to_pydantic(model)
 
-    async def delete_agent(self, agent_id: str) -> bool:
-        """Delete an agent. Returns True if deleted, False if not found."""
-        if agent_id not in _agent_store:
+    async def delete_agent(self, agent_id: str, db: Optional[AsyncSession] = None) -> bool:
+        """Delete an agent from the database."""
+        if db is None:
+            async with AsyncSessionLocal() as session:
+                return await self.delete_agent(agent_id, session)
+
+        result = await db.execute(select(AgentModel).where(AgentModel.id == agent_id))
+        model = result.scalar_one_or_none()
+        if not model:
             return False
-        del _agent_store[agent_id]
-        logger.info("🗑️ Deleted agent: %s", agent_id)
+
+        await db.delete(model)
+        await db.commit()
+        logger.info("🗑️ Deleted agent from DB: %s", agent_id)
         return True
 
-
-# Module-level singleton — import this in routes and other services
+# Module-level singleton
 agent_service = AgentService()

@@ -15,7 +15,9 @@ class KnowledgeDocument(BaseModel):
     id: str
     agent_id: str
     filename: str
-    content_type: str = Field(default="text/plain", description="MIME type of the uploaded file")
+    content_type: str = Field(
+        default="text/plain", description="MIME type of the uploaded file"
+    )
     chunk_count: int = Field(default=0, description="Number of text chunks indexed")
     size_bytes: int = Field(default=0)
     created_at: Optional[datetime] = None

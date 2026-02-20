@@ -19,10 +19,19 @@ class AgentConfig(BaseModel):
     vad_min_volume: float = Field(default=0.15, description="VAD sensitivity threshold")
     is_active: bool = Field(default=True, description="Whether the agent is active")
     # Sprint 2 additions
-    temperature: float = Field(default=0.7, ge=0.0, le=1.0, description="LLM temperature")
-    success_outcomes: List[str] = Field(default_factory=lambda: ["Appointment Booked"], description="Tags for successful calls")
-    handoff_number: Optional[str] = Field(default=None, description="PSTN number to transfer to a human")
-    first_message: Optional[str] = Field(default=None, description="Agent's opening line when a call connects")
+    temperature: float = Field(
+        default=0.7, ge=0.0, le=1.0, description="LLM temperature"
+    )
+    success_outcomes: List[str] = Field(
+        default_factory=lambda: ["Appointment Booked"],
+        description="Tags for successful calls",
+    )
+    handoff_number: Optional[str] = Field(
+        default=None, description="PSTN number to transfer to a human"
+    )
+    first_message: Optional[str] = Field(
+        default=None, description="Agent's opening line when a call connects"
+    )
 
 
 class AgentCreateRequest(BaseModel):

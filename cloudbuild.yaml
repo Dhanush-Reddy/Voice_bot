@@ -1,4 +1,5 @@
 steps:
+  # --- BACKEND ---
   # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'gcr.io/$PROJECT_ID/voice-backend:$COMMIT_SHA', '-f', 'backend/Dockerfile.backend', './backend']
@@ -29,16 +30,48 @@ steps:
       - '8Gi'
       - '--no-cpu-throttling'
       - '--set-env-vars'
-      - 'LIVEKIT_URL=${_LIVEKIT_URL},LIVEKIT_API_KEY=${_LIVEKIT_API_KEY},LIVEKIT_API_SECRET=${_LIVEKIT_API_SECRET},GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_APPLICATION_CREDENTIALS_JSON=${_GOOGLE_APPLICATION_CREDENTIALS_JSON}'
+      - 'LIVEKIT_URL=${_LIVEKIT_URL},LIVEKIT_API_KEY=${_LIVEKIT_API_KEY},LIVEKIT_API_SECRET=${_LIVEKIT_API_SECRET},GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_APPLICATION_CREDENTIALS_JSON=${_GOOGLE_APPLICATION_CREDENTIALS_JSON},GEMINI_API_KEY=${_GEMINI_API_KEY}'
+
+  # --- FRONTEND ---
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build', 
+      '-t', 'gcr.io/$PROJECT_ID/voice-frontend:$COMMIT_SHA', 
+      '-f', 'frontend/Dockerfile.frontend', 
+      '--build-arg', 'NEXT_PUBLIC_BACKEND_URL=https://voice-bot-mcdqao6eba-uc.a.run.app',
+      './frontend'
+    ]
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/voice-frontend:$COMMIT_SHA']
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'voice-frontend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/voice-frontend:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
 
 images:
   - 'gcr.io/$PROJECT_ID/voice-backend:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/voice-frontend:$COMMIT_SHA'
 
 substitutions:
   _LIVEKIT_URL: 'wss://voice-agent-xxxx.livekit.cloud'
   _LIVEKIT_API_KEY: 'APIxxxx'
   _LIVEKIT_API_SECRET: 'SGxxxx'
   _GOOGLE_APPLICATION_CREDENTIALS_JSON: '{}'
+  _GEMINI_API_KEY: ''
 
 options:
   logging: CLOUD_LOGGING_ONLY

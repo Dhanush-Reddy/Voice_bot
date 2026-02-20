@@ -34,12 +34,19 @@ class CallLog(BaseModel):
     agent_name: Optional[str] = None
     room_name: str
     status: str = Field(..., description="'completed', 'failed', 'no_answer'")
-    outcome: Optional[str] = Field(None, description="'success', 'not_interested', etc.")
+    outcome: Optional[str] = Field(
+        None, description="'success', 'not_interested', etc."
+    )
     duration_seconds: int = Field(default=0)
-    participant_count: int = Field(default=1, description="Number of participants in the room")
+    participant_count: int = Field(
+        default=1, description="Number of participants in the room"
+    )
     transcript: Optional[List[TranscriptMessage]] = None
+    summary: Optional[str] = Field(None, description="AI-generated call summary")
     recording_url: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Extra data from LiveKit webhook")
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None, description="Extra data from LiveKit webhook"
+    )
     created_at: Optional[datetime] = None
 
 

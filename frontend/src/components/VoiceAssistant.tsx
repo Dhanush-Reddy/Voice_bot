@@ -9,7 +9,7 @@ import {
     RoomAudioRenderer,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
-import { ConnectionState, RoomEvent, Participant, Track } from "livekit-client";
+import { ConnectionState, RoomEvent, Participant } from "livekit-client";
 
 interface VoiceAssistantProps {
     token: string;
@@ -79,7 +79,7 @@ function ActiveRoom({ onDisconnect }: { onDisconnect: () => void }) {
             case ConnectionState.Connecting:
                 setStatusText("Connecting…");
                 break;
-            case ConnectionState.Connected:
+            case ConnectionState.Connected: {
                 const botParticipant = participants.find(
                     (p: Participant) => p.identity !== room?.localParticipant?.identity
                 );
@@ -95,6 +95,7 @@ function ActiveRoom({ onDisconnect }: { onDisconnect: () => void }) {
                     setStatusText("Waiting for AI to join…");
                 }
                 break;
+            }
             case ConnectionState.Reconnecting:
                 setStatusText("Reconnecting…");
                 break;
@@ -102,7 +103,7 @@ function ActiveRoom({ onDisconnect }: { onDisconnect: () => void }) {
                 setStatusText("Disconnected");
                 break;
         }
-    }, [connectionState, participants, isBotSpeaking, room]);
+    }, [connectionState, participants, isBotSpeaking, isUserSpeaking, room]);
 
     const handleDisconnect = useCallback(() => {
         room?.disconnect();

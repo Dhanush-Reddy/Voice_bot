@@ -28,13 +28,13 @@ from models.knowledge import KnowledgeDocument, KnowledgeChunk, KnowledgeSearchR
 logger = logging.getLogger(__name__)
 
 # Chunking config
-CHUNK_SIZE = 512       # characters per chunk
-CHUNK_OVERLAP = 64     # overlap between consecutive chunks
+CHUNK_SIZE = 512  # characters per chunk
+CHUNK_OVERLAP = 64  # overlap between consecutive chunks
 MAX_CHUNKS_PER_DOC = 200
 
 # In-memory stores
 _documents: dict[str, KnowledgeDocument] = {}
-_chunks: dict[str, KnowledgeChunk] = {}   # chunk_id → KnowledgeChunk
+_chunks: dict[str, KnowledgeChunk] = {}  # chunk_id → KnowledgeChunk
 
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
@@ -121,7 +121,9 @@ class KnowledgeService:
         chunks = _chunk_text(text_content)
         logger.info(
             "📚 Ingesting document: agent=%s file=%s chunks=%d",
-            agent_id, filename, len(chunks),
+            agent_id,
+            filename,
+            len(chunks),
         )
 
         stored = 0
@@ -207,7 +209,11 @@ class KnowledgeService:
         for cid in to_delete:
             del _chunks[cid]
         del _documents[document_id]
-        logger.info("🗑️  Document deleted: id=%s (%d chunks removed)", document_id, len(to_delete))
+        logger.info(
+            "🗑️  Document deleted: id=%s (%d chunks removed)",
+            document_id,
+            len(to_delete),
+        )
         return True
 
     def stats(self, agent_id: Optional[str] = None) -> dict:
