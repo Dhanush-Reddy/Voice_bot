@@ -58,6 +58,7 @@ class Settings:
         )
 
         # ── App ───────────────────────────────────────────────────────────────
+        self.database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./voice_bot.db")
         try:
             self.agent_pool_size: int = int(os.getenv("AGENT_POOL_SIZE", "3"))
         except ValueError:
