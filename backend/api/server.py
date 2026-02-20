@@ -8,6 +8,8 @@ import uvicorn
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
+    # Explicit logging for Cloud Run troubleshooting
+    print(f"🚀 [CLOUD] Starting backend on 0.0.0.0:{port} (PORT env={os.getenv('PORT')})", flush=True)
     uvicorn.run(
         "api.routes:app",
         host="0.0.0.0",

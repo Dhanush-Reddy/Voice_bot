@@ -40,16 +40,28 @@ from core.database import init_db
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start agent pool and database on boot, shut down on exit."""
-    logger.info("🗄️  Initializing database...")
-    await init_db()
+    logger.info("🗄️  [BOOT] Initializing database...")
+    try:
+        await init_db()
+        logger.info("✅ [BOOT] Database initialized successfully")
+    except Exception as e:
+        logger.error("❌ [BOOT] Database initialization failed: %s", e, exc_info=True)
+        # We continue anyway to let the health check pass; pool might fail later
     
-    logger.info("🌱 Seeding default agent...")
-    await agent_service.seed_default_agent()
+    logger.info("🌱 [BOOT] Seeding default agent...")
+    try:
+        await agent_service.seed_default_agent()
+    except Exception as e:
+        logger.error("❌ [BOOT] Seeding failed: %s", e)
 
-    logger.info("🏊 Initializing agent pool on server startup…")
-    await agent_pool.start()
+    # CRITICAL: Start pool in background so we don't block Uvicorn from binding to the port.
+    # Cloud Run health checks fail if we don't listen within a timeout.
+    logger.info("🏊 [BOOT] Starting agent pool in background…")
+    asyncio.create_task(agent_pool.start())
+    
     yield
-    logger.info("🛑 Shutting down agent pool…")
+    
+    logger.info("🛑 [SHUTDOWN] Shutting down agent pool…")
     await agent_pool.shutdown()
 
 
