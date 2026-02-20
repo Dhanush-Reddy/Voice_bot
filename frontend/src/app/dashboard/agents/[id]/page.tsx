@@ -19,11 +19,11 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:808
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const VARIABLES = [
-    { token: "{{user_name}}",     label: "User Name" },
+    { token: "{{user_name}}", label: "User Name" },
     { token: "{{business_name}}", label: "Business Name" },
-    { token: "{{phone_number}}",  label: "Phone Number" },
-    { token: "{{date}}",          label: "Today's Date" },
-    { token: "{{time}}",          label: "Current Time" },
+    { token: "{{phone_number}}", label: "Phone Number" },
+    { token: "{{date}}", label: "Today's Date" },
+    { token: "{{time}}", label: "Current Time" },
 ];
 
 const TEMPLATES = [
@@ -122,36 +122,36 @@ interface AgentForm {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AgentEditorPage() {
-    const params  = useParams();
-    const router  = useRouter();
+    const params = useParams();
+    const router = useRouter();
     const agentId = params?.id as string;
-    const isNew   = agentId === "new";
+    const isNew = agentId === "new";
 
     const [activeTab, setActiveTab] = useState<Tab>("overview");
     const [form, setForm] = useState<AgentForm>({
-        name:             "",
-        system_prompt:    "",
-        voice_id:         "Aoede",
-        model:            "gemini-2.0-flash-live-001",
-        language:         "en-US",
-        is_active:        true,
-        temperature:      0.7,
+        name: "",
+        system_prompt: "",
+        voice_id: "Aoede",
+        model: "gemini-2.0-flash-live-001",
+        language: "en-US",
+        is_active: true,
+        temperature: 0.7,
         success_outcomes: ["Appointment Booked"],
-        handoff_number:   "",
-        first_message:    "",
+        handoff_number: "",
+        first_message: "",
     });
-    const [loading,          setLoading]          = useState(!isNew);
-    const [saving,           setSaving]           = useState(false);
-    const [error,            setError]            = useState("");
-    const [showTemplates,    setShowTemplates]    = useState(isNew);
-    const [promptRef,        setPromptRef]        = useState<HTMLTextAreaElement | null>(null);
-    const [outcomeInput,     setOutcomeInput]     = useState("");
+    const [loading, setLoading] = useState(!isNew);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+    const [showTemplates, setShowTemplates] = useState(isNew);
+    const [promptRef, setPromptRef] = useState<HTMLTextAreaElement | null>(null);
+    const [outcomeInput, setOutcomeInput] = useState("");
 
-    const [voices,    setVoices]    = useState<VoiceOption[]>([]);
-    const [models,    setModels]    = useState<ModelOption[]>([]);
+    const [voices, setVoices] = useState<VoiceOption[]>([]);
+    const [models, setModels] = useState<ModelOption[]>([]);
     const [languages, setLanguages] = useState<LanguageOption[]>([]);
     const [playingId, setPlayingId] = useState<string | null>(null);
-    const [audio,      setAudio]      = useState<HTMLAudioElement | null>(null);
+    const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
 
     // ── Fetch Options ─────────────────────────────────────────────────────────
     useEffect(() => {
@@ -174,7 +174,7 @@ export default function AgentEditorPage() {
     // ── Voice Preview ─────────────────────────────────────────────────────────
     const playSample = (id: string, url?: string) => {
         if (!url) return;
-        
+
         if (playingId === id) {
             audio?.pause();
             setPlayingId(null);
@@ -190,7 +190,7 @@ export default function AgentEditorPage() {
             console.error("Playback failed:", e);
             setPlayingId(null);
         });
-        
+
         setAudio(newAudio);
         setPlayingId(id);
 
@@ -209,20 +209,20 @@ export default function AgentEditorPage() {
         if (isNew) return;
         const fetchAgent = async () => {
             try {
-                const res  = await fetch(`${BACKEND_URL}/api/agents/${agentId}`);
+                const res = await fetch(`${BACKEND_URL}/api/agents/${agentId}`);
                 if (!res.ok) throw new Error("Agent not found");
                 const data = await res.json();
                 setForm({
-                    name:             data.name,
-                    system_prompt:    data.system_prompt,
-                    voice_id:         data.voice_id,
-                    model:            data.model,
-                    language:         data.language,
-                    is_active:        data.is_active,
-                    temperature:      data.temperature ?? 0.7,
+                    name: data.name,
+                    system_prompt: data.system_prompt,
+                    voice_id: data.voice_id,
+                    model: data.model,
+                    language: data.language,
+                    is_active: data.is_active,
+                    temperature: data.temperature ?? 0.7,
                     success_outcomes: data.success_outcomes ?? ["Appointment Booked"],
-                    handoff_number:   data.handoff_number ?? "",
-                    first_message:    data.first_message ?? "",
+                    handoff_number: data.handoff_number ?? "",
+                    first_message: data.first_message ?? "",
                 });
             } catch {
                 setError("Could not load agent.");
@@ -237,8 +237,8 @@ export default function AgentEditorPage() {
     const injectVariable = useCallback((token: string) => {
         if (!promptRef) return;
         const start = promptRef.selectionStart ?? form.system_prompt.length;
-        const end   = promptRef.selectionEnd   ?? start;
-        const next  =
+        const end = promptRef.selectionEnd ?? start;
+        const next =
             form.system_prompt.slice(0, start) +
             token +
             form.system_prompt.slice(end);
@@ -254,10 +254,10 @@ export default function AgentEditorPage() {
     const applyTemplate = (t: typeof TEMPLATES[0]) => {
         setForm((f) => ({
             ...f,
-            name:          t.name,
+            name: t.name,
             system_prompt: t.system_prompt,
-            voice_id:      t.voice_id,
-            language:      t.language,
+            voice_id: t.voice_id,
+            language: t.language,
         }));
         setShowTemplates(false);
     };
@@ -276,12 +276,12 @@ export default function AgentEditorPage() {
         setSaving(true);
         setError("");
         try {
-            const url    = isNew ? `${BACKEND_URL}/api/agents` : `${BACKEND_URL}/api/agents/${agentId}`;
+            const url = isNew ? `${BACKEND_URL}/api/agents` : `${BACKEND_URL}/api/agents/${agentId}`;
             const method = isNew ? "POST" : "PATCH";
-            const res    = await fetch(url, {
+            const res = await fetch(url, {
                 method,
                 headers: { "Content-Type": "application/json" },
-                body:    JSON.stringify(form),
+                body: JSON.stringify(form),
             });
             if (!res.ok) throw new Error("Save failed");
             router.push("/dashboard/agents");
@@ -294,13 +294,13 @@ export default function AgentEditorPage() {
 
     // ── Cost estimator ────────────────────────────────────────────────────────
     const selectedModel = models.find((m) => m.id === form.model) ?? models[0] ?? { cost: 0, label: "Unknown" };
-    const costPerMin    = selectedModel.cost;
+    const costPerMin = selectedModel.cost;
 
     // ── Tabs config ───────────────────────────────────────────────────────────
     const TABS: { id: Tab; label: string }[] = [
-        { id: "overview",  label: "Overview" },
-        { id: "voice",     label: "Voice & AI" },
-        { id: "behavior",  label: "Behavior" },
+        { id: "overview", label: "Overview" },
+        { id: "voice", label: "Voice & AI" },
+        { id: "behavior", label: "Behavior" },
     ];
 
     // ── Loading skeleton ──────────────────────────────────────────────────────
@@ -378,11 +378,10 @@ export default function AgentEditorPage() {
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                            activeTab === tab.id
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.id
                                 ? "bg-violet-600 text-white shadow-sm"
                                 : "text-slate-400 hover:text-slate-200"
-                        }`}
+                            }`}
                     >
                         {tab.label}
                     </button>
@@ -411,13 +410,17 @@ export default function AgentEditorPage() {
 
                         {/* First Message */}
                         <div className="space-y-2">
-                            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                            <label
+                                htmlFor="opening-message"
+                                className="text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                            >
                                 Opening Message
                             </label>
                             <p className="text-xs text-slate-600">
                                 What the agent says first when a call connects. Leave blank to let the AI decide.
                             </p>
                             <input
+                                id="opening-message"
                                 type="text"
                                 value={form.first_message}
                                 onChange={(e) => setForm({ ...form, first_message: e.target.value })}
@@ -473,13 +476,12 @@ export default function AgentEditorPage() {
                             </label>
                             <div className="grid grid-cols-2 gap-2">
                                 {voices.map((v) => (
-                                    <div 
+                                    <div
                                         key={v.id}
-                                        className={`relative group flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all border ${
-                                            form.voice_id === v.id
+                                        className={`relative group flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all border ${form.voice_id === v.id
                                                 ? "bg-violet-600/20 border-violet-500/50 text-white"
                                                 : "bg-white/[0.02] border-white/5 text-slate-400 hover:border-white/15 hover:text-slate-200"
-                                        }`}
+                                            }`}
                                     >
                                         <button
                                             onClick={() => setForm({ ...form, voice_id: v.id })}
@@ -491,15 +493,14 @@ export default function AgentEditorPage() {
                                                 <p className="text-[10px] text-slate-500">{v.description}</p>
                                             </div>
                                         </button>
-                                        
+
                                         {v.sample_url && (
                                             <button
                                                 onClick={() => playSample(v.id, v.sample_url)}
-                                                className={`p-1.5 rounded-lg transition-all ${
-                                                    playingId === v.id 
-                                                        ? "bg-violet-500 text-white" 
+                                                className={`p-1.5 rounded-lg transition-all ${playingId === v.id
+                                                        ? "bg-violet-500 text-white"
                                                         : "bg-white/5 text-slate-500 hover:text-white hover:bg-white/10"
-                                                }`}
+                                                    }`}
                                                 title="Play Sample"
                                             >
                                                 {playingId === v.id ? (
@@ -528,11 +529,10 @@ export default function AgentEditorPage() {
                                     <button
                                         key={m.id}
                                         onClick={() => setForm({ ...form, model: m.id })}
-                                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
-                                            form.model === m.id
+                                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${form.model === m.id
                                                 ? "bg-violet-600/20 border-violet-500/50"
                                                 : "bg-white/[0.02] border-white/5 hover:border-white/15"
-                                        }`}
+                                            }`}
                                     >
                                         <span className={`text-sm font-medium ${form.model === m.id ? "text-white" : "text-slate-400"}`}>
                                             {m.label}
@@ -578,11 +578,10 @@ export default function AgentEditorPage() {
                                     <button
                                         key={l.id}
                                         onClick={() => setForm({ ...form, language: l.id })}
-                                        className={`px-4 py-2.5 rounded-xl text-sm text-left transition-all border ${
-                                            form.language === l.id
+                                        className={`px-4 py-2.5 rounded-xl text-sm text-left transition-all border ${form.language === l.id
                                                 ? "bg-violet-600/20 border-violet-500/50 text-white"
                                                 : "bg-white/[0.02] border-white/5 text-slate-400 hover:border-white/15"
-                                        }`}
+                                            }`}
                                     >
                                         {l.label}
                                     </button>

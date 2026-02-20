@@ -65,6 +65,7 @@ function AgentCard({ agent }: { agent: Agent }) {
                 </Link>
                 <Link
                     href={`/try?agent_id=${agent.id}`}
+                    id={`try-agent-${agent.id}`}
                     className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-white bg-violet-600 hover:bg-violet-500 transition-colors"
                 >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
