@@ -25,7 +25,14 @@ out/
 *service-account*.json
 *google*.json
 gen-lang-client-*.json
+*creds*.json
+substitutions.json
 !credentials/.gitkeep
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
 
 # Logs
 *.log

@@ -14,34 +14,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const VOICE_OPTIONS = [
-    { id: "Aoede",  desc: "Warm & Friendly" },
-    { id: "Charon", desc: "Deep & Authoritative" },
-    { id: "Fenrir", desc: "Bold & Energetic" },
-    { id: "Kore",   desc: "Clear & Professional" },
-    { id: "Leda",   desc: "Soft & Empathetic" },
-    { id: "Orus",   desc: "Calm & Measured" },
-    { id: "Puck",   desc: "Bright & Cheerful" },
-    { id: "Zephyr", desc: "Smooth & Confident" },
-];
-
-const MODEL_OPTIONS = [
-    { value: "gemini-2.0-flash-live-001",                    label: "Gemini 2.0 Flash",  cost: 0.5 },
-    { value: "gemini-2.5-flash-preview-native-audio-dialog", label: "Gemini 2.5 Flash",  cost: 1.2 },
-];
-
-const LANGUAGE_OPTIONS = [
-    { value: "en-US", label: "🇺🇸 English (US)" },
-    { value: "hi-IN", label: "🇮🇳 Hindi" },
-    { value: "ta-IN", label: "🇮🇳 Tamil" },
-    { value: "te-IN", label: "🇮🇳 Telugu" },
-    { value: "kn-IN", label: "🇮🇳 Kannada" },
-    { value: "mr-IN", label: "🇮🇳 Marathi" },
-];
 
 const VARIABLES = [
     { token: "{{user_name}}",     label: "User Name" },
@@ -114,6 +89,23 @@ const OUTCOME_PRESETS = [
 
 type Tab = "overview" | "voice" | "behavior";
 
+interface VoiceOption {
+    id: string;
+    description: string;
+    sample_url?: string;
+}
+
+interface ModelOption {
+    id: string;
+    label: string;
+    cost: number;
+}
+
+interface LanguageOption {
+    id: string;
+    label: string;
+}
+
 interface AgentForm {
     name: string;
     system_prompt: string;
@@ -154,6 +146,63 @@ export default function AgentEditorPage() {
     const [showTemplates,    setShowTemplates]    = useState(isNew);
     const [promptRef,        setPromptRef]        = useState<HTMLTextAreaElement | null>(null);
     const [outcomeInput,     setOutcomeInput]     = useState("");
+
+    const [voices,    setVoices]    = useState<VoiceOption[]>([]);
+    const [models,    setModels]    = useState<ModelOption[]>([]);
+    const [languages, setLanguages] = useState<LanguageOption[]>([]);
+    const [playingId, setPlayingId] = useState<string | null>(null);
+    const [audio,      setAudio]      = useState<HTMLAudioElement | null>(null);
+
+    // ── Fetch Options ─────────────────────────────────────────────────────────
+    useEffect(() => {
+        const fetchOptions = async () => {
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/config/options`);
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                const data = await res.json();
+                setVoices(data.voices);
+                setModels(data.models);
+                setLanguages(data.languages);
+            } catch (err) {
+                console.error("Failed to load configuration options from:", `${BACKEND_URL}/api/config/options`, err);
+                setError("Failed to load configuration options (Voices, AI Model, etc.). Please check your backend connection.");
+            }
+        };
+        fetchOptions();
+    }, []);
+
+    // ── Voice Preview ─────────────────────────────────────────────────────────
+    const playSample = (id: string, url?: string) => {
+        if (!url) return;
+        
+        if (playingId === id) {
+            audio?.pause();
+            setPlayingId(null);
+            return;
+        }
+
+        if (audio) {
+            audio.pause();
+        }
+
+        const newAudio = new Audio(url);
+        newAudio.play().catch(e => {
+            console.error("Playback failed:", e);
+            setPlayingId(null);
+        });
+        
+        setAudio(newAudio);
+        setPlayingId(id);
+
+        newAudio.onerror = (e) => {
+            console.error("Audio error:", e);
+            setPlayingId(null);
+        };
+
+        newAudio.onended = () => {
+            setPlayingId(null);
+        };
+    };
 
     // ── Fetch existing agent ──────────────────────────────────────────────────
     useEffect(() => {
@@ -244,7 +293,7 @@ export default function AgentEditorPage() {
     };
 
     // ── Cost estimator ────────────────────────────────────────────────────────
-    const selectedModel = MODEL_OPTIONS.find((m) => m.value === form.model) ?? MODEL_OPTIONS[0];
+    const selectedModel = models.find((m) => m.id === form.model) ?? models[0] ?? { cost: 0, label: "Unknown" };
     const costPerMin    = selectedModel.cost;
 
     // ── Tabs config ───────────────────────────────────────────────────────────
@@ -423,22 +472,48 @@ export default function AgentEditorPage() {
                                 Voice
                             </label>
                             <div className="grid grid-cols-2 gap-2">
-                                {VOICE_OPTIONS.map((v) => (
-                                    <button
+                                {voices.map((v) => (
+                                    <div 
                                         key={v.id}
-                                        onClick={() => setForm({ ...form, voice_id: v.id })}
-                                        className={`flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all border ${
+                                        className={`relative group flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all border ${
                                             form.voice_id === v.id
                                                 ? "bg-violet-600/20 border-violet-500/50 text-white"
                                                 : "bg-white/[0.02] border-white/5 text-slate-400 hover:border-white/15 hover:text-slate-200"
                                         }`}
                                     >
-                                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${form.voice_id === v.id ? "bg-violet-400" : "bg-slate-600"}`} />
-                                        <div>
-                                            <p className="text-sm font-medium">{v.id}</p>
-                                            <p className="text-[10px] text-slate-500">{v.desc}</p>
-                                        </div>
-                                    </button>
+                                        <button
+                                            onClick={() => setForm({ ...form, voice_id: v.id })}
+                                            className="flex-1 flex items-center gap-3"
+                                        >
+                                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${form.voice_id === v.id ? "bg-violet-400" : "bg-slate-600"}`} />
+                                            <div>
+                                                <p className="text-sm font-medium">{v.id}</p>
+                                                <p className="text-[10px] text-slate-500">{v.description}</p>
+                                            </div>
+                                        </button>
+                                        
+                                        {v.sample_url && (
+                                            <button
+                                                onClick={() => playSample(v.id, v.sample_url)}
+                                                className={`p-1.5 rounded-lg transition-all ${
+                                                    playingId === v.id 
+                                                        ? "bg-violet-500 text-white" 
+                                                        : "bg-white/5 text-slate-500 hover:text-white hover:bg-white/10"
+                                                }`}
+                                                title="Play Sample"
+                                            >
+                                                {playingId === v.id ? (
+                                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                                                    </svg>
+                                                ) : (
+                                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                                        <path d="M8 5v14l11-7z" />
+                                                    </svg>
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
                                 ))}
                             </div>
                         </div>
@@ -449,17 +524,17 @@ export default function AgentEditorPage() {
                                 AI Model
                             </label>
                             <div className="space-y-2">
-                                {MODEL_OPTIONS.map((m) => (
+                                {models.map((m) => (
                                     <button
-                                        key={m.value}
-                                        onClick={() => setForm({ ...form, model: m.value })}
+                                        key={m.id}
+                                        onClick={() => setForm({ ...form, model: m.id })}
                                         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
-                                            form.model === m.value
+                                            form.model === m.id
                                                 ? "bg-violet-600/20 border-violet-500/50"
                                                 : "bg-white/[0.02] border-white/5 hover:border-white/15"
                                         }`}
                                     >
-                                        <span className={`text-sm font-medium ${form.model === m.value ? "text-white" : "text-slate-400"}`}>
+                                        <span className={`text-sm font-medium ${form.model === m.id ? "text-white" : "text-slate-400"}`}>
                                             {m.label}
                                         </span>
                                         <span className="text-xs text-slate-500 font-mono">
@@ -499,12 +574,12 @@ export default function AgentEditorPage() {
                                 Primary Language
                             </label>
                             <div className="grid grid-cols-2 gap-2">
-                                {LANGUAGE_OPTIONS.map((l) => (
+                                {languages.map((l) => (
                                     <button
-                                        key={l.value}
-                                        onClick={() => setForm({ ...form, language: l.value })}
+                                        key={l.id}
+                                        onClick={() => setForm({ ...form, language: l.id })}
                                         className={`px-4 py-2.5 rounded-xl text-sm text-left transition-all border ${
-                                            form.language === l.value
+                                            form.language === l.id
                                                 ? "bg-violet-600/20 border-violet-500/50 text-white"
                                                 : "bg-white/[0.02] border-white/5 text-slate-400 hover:border-white/15"
                                         }`}
