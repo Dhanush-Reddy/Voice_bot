@@ -57,7 +57,7 @@ export default function DashboardPage() {
                 if (healthRes.ok) setHealth(await healthRes.json());
                 setBackendDown(false);
             } catch (err) {
-                console.error("Dashboard fetch failed:", err);
+                console.error("Failed to fetch dashboard data:", err);
                 setBackendDown(true);
             } finally {
                 setLoading(false);

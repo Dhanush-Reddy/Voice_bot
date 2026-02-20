@@ -53,10 +53,11 @@ class Settings:
         )
 
         # ── App ───────────────────────────────────────────────────────────────
-        self.agent_pool_size: int = self._parse_int("AGENT_POOL_SIZE", 3)
-        self.default_bot_voice: str = os.getenv("BOT_VOICE", "Aoede").strip()
-        self.default_bot_model: str = os.getenv("BOT_MODEL", "gemini-2.0-flash-live-001").strip()
-        self.database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./voice.db")
+        try:
+            self.agent_pool_size: int = int(os.getenv("AGENT_POOL_SIZE", "3"))
+        except ValueError:
+            logger.warning("⚠️  AGENT_POOL_SIZE is not a valid integer — using default 3")
+            self.agent_pool_size = 3
         self.start_time: float = time.time()
 
         # ── Derived flags ─────────────────────────────────────────────────────
