@@ -35,9 +35,17 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # App lifespan — start/stop the agent pool
 # ---------------------------------------------------------------------------
+from core.database import init_db
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start agent pool on boot, shut down on exit."""
+    """Start agent pool and database on boot, shut down on exit."""
+    logger.info("🗄️  Initializing database...")
+    await init_db()
+    
+    logger.info("🌱 Seeding default agent...")
+    await agent_service.seed_default_agent()
+
     logger.info("🏊 Initializing agent pool on server startup…")
     await agent_pool.start()
     yield
@@ -52,10 +60,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow the Next.js frontend and dashboard
+# CORS — allow specific origins for secure credential handling
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://voicebt.netlify.app",
+        "https://voice-frontend-mcdqao6eba-uc.a.run.app",
+        "https://voice-frontend-820513756722.us-central1.run.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,7 +81,9 @@ app.add_middleware(
 @app.get("/api/token", response_model=TokenResponse)
 async def generate_token(
     participant_name: str = Query(..., description="Display name of the participant"),
-    agent_id: Optional[str] = Query(None, description="Agent UUID (uses default if omitted)"),
+    agent_id: Optional[str] = Query(
+        None, description="Agent UUID (uses default if omitted)"
+    ),
 ):
     """
     Pop a pre-warmed agent from the pool and return a token for the user.
@@ -85,9 +100,13 @@ async def generate_token(
         if agent_id:
             agent = await agent_service.get_agent(agent_id)
             if not agent:
-                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found.")
+                raise HTTPException(
+                    status_code=404, detail=f"Agent '{agent_id}' not found."
+                )
             if not agent.is_active:
-                raise HTTPException(status_code=400, detail=f"Agent '{agent_id}' is not active.")
+                raise HTTPException(
+                    status_code=400, detail=f"Agent '{agent_id}' is not active."
+                )
         else:
             agent = await agent_service.get_default_agent()
 
@@ -170,8 +189,12 @@ async def delete_agent(agent_id: str):
 @app.get("/api/calls", response_model=List[CallLog])
 async def list_calls(
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
-    status: Optional[str] = Query(None, description="Filter by status: completed, failed, no_answer"),
-    outcome: Optional[str] = Query(None, description="Filter by outcome: success, not_interested, etc."),
+    status: Optional[str] = Query(
+        None, description="Filter by status: completed, failed, no_answer"
+    ),
+    outcome: Optional[str] = Query(
+        None, description="Filter by outcome: success, not_interested, etc."
+    ),
     limit: int = Query(100, le=500),
 ):
     """Return call history with optional filters."""
@@ -223,7 +246,11 @@ async def livekit_webhook(payload: LiveKitWebhookPayload):
 # ---------------------------------------------------------------------------
 # Sprint 5: Knowledge Base & RAG
 # ---------------------------------------------------------------------------
-@app.post("/api/agents/{agent_id}/knowledge", response_model=KnowledgeDocument, status_code=201)
+@app.post(
+    "/api/agents/{agent_id}/knowledge",
+    response_model=KnowledgeDocument,
+    status_code=201,
+)
 async def upload_document(
     agent_id: str,
     file: UploadFile = File(...),
@@ -247,6 +274,7 @@ async def upload_document(
         try:
             import io
             import pypdf
+
             reader = pypdf.PdfReader(io.BytesIO(raw))
             text = "\n".join(page.extract_text() or "" for page in reader.pages)
         except ImportError:
@@ -258,7 +286,9 @@ async def upload_document(
         text = raw.decode("utf-8", errors="replace")
 
     if not text.strip():
-        raise HTTPException(status_code=422, detail="Could not extract text from the uploaded file.")
+        raise HTTPException(
+            status_code=422, detail="Could not extract text from the uploaded file."
+        )
 
     doc = await knowledge_service.ingest(
         agent_id=agent_id,
@@ -287,7 +317,10 @@ async def delete_document(document_id: str):
         raise HTTPException(status_code=404, detail="Document not found.")
 
 
-@app.get("/api/agents/{agent_id}/knowledge/search", response_model=List[KnowledgeSearchResult])
+@app.get(
+    "/api/agents/{agent_id}/knowledge/search",
+    response_model=List[KnowledgeSearchResult],
+)
 async def search_knowledge(
     agent_id: str,
     q: str = Query(..., description="Search query"),
@@ -324,7 +357,10 @@ async def reload_agent_config(agent_id: str):
 
     config_service.invalidate(agent_id)
     logger.info("🔥 Hot-reload triggered for agent: %s (%s)", agent.name, agent_id)
-    return {"message": f"Config cache cleared for agent '{agent.name}'. Next call will use updated config.", "agent_id": agent_id}
+    return {
+        "message": f"Config cache cleared for agent '{agent.name}'. Next call will use updated config.",
+        "agent_id": agent_id,
+    }
 
 
 @app.post("/api/config/flush", status_code=200)
@@ -340,6 +376,16 @@ async def config_cache_stats():
     return config_service.cache_stats
 
 
+@app.get("/api/config/options", response_model=ConfigOptionsResponse)
+async def get_config_options():
+    """Return available voice, model, and language options."""
+    return ConfigOptionsResponse(
+        voices=VOICE_OPTIONS,
+        models=MODEL_OPTIONS,
+        languages=LANGUAGE_OPTIONS,
+    )
+
+
 @app.get("/api/health")
 async def health():
     """Comprehensive health check for monitoring."""
@@ -350,7 +396,7 @@ async def health():
         "uptime_seconds": settings.uptime_seconds,
         "pool": agent_pool.status,
         "config_cache": config_service.cache_stats,
-        "calls": call_log_service.stats,
+        "calls": await call_log_service.get_stats(),
         "env_check": {
             "has_lk_url": bool(settings.livekit_url),
             "has_lk_key": bool(settings.livekit_api_key),
