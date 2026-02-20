@@ -83,7 +83,8 @@ export default function DashboardPage() {
                 if (callsRes.ok) setCalls(await callsRes.json());
                 if (healthRes.ok) setHealth(await healthRes.json());
                 setBackendDown(false);
-            } catch {
+            } catch (err) {
+                console.error("Failed to fetch dashboard data:", err);
                 setBackendDown(true);
             } finally {
                 setLoading(false);
