@@ -51,7 +51,11 @@ class Settings:
         )
 
         # ── App ───────────────────────────────────────────────────────────────
-        self.agent_pool_size: int = int(os.getenv("AGENT_POOL_SIZE", "3"))
+        try:
+            self.agent_pool_size: int = int(os.getenv("AGENT_POOL_SIZE", "3"))
+        except ValueError:
+            logger.warning("⚠️  AGENT_POOL_SIZE is not a valid integer — using default 3")
+            self.agent_pool_size = 3
         self.start_time: float = time.time()
 
         # ── Derived flags ─────────────────────────────────────────────────────
