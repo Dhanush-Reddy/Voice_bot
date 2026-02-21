@@ -152,6 +152,23 @@ class AgentPool:
         except Exception as e:
             logger.error(f"❌ Error removing agent: {e}")
 
+    async def recycle_agents(self, agent_id: Optional[str] = None) -> None:
+        """Kill pre-warmed agents in the pool to force them to reload fresh config."""
+        logger.info("♻️ Recycling agents for agent_id=%s to apply fresh config...", agent_id)
+        agents_to_remove = []
+        async with self._lock:
+            for agent in self._all_agents:
+                # If agent_id is None, recycle all fallback agents.
+                # If agent_id is provided, recycle matching ones (or None if fallback).
+                if agent_id is None or agent.agent_id == agent_id or agent.agent_id is None:
+                    agents_to_remove.append(agent)
+                    
+        for agent in agents_to_remove:
+            await self._remove_agent(agent)
+            
+        # The background replenish task will automatically spawn fresh ones with new configs
+
+
     async def pop(self, agent_id: Optional[str] = None) -> Optional[PooledAgent]:
         """
         Pop a ready agent from the pool (instant).

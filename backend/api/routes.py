@@ -187,6 +187,15 @@ async def update_agent(agent_id: str, request: AgentUpdateRequest):
     agent = await agent_service.update_agent(agent_id, request)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found.")
+        
+    # Instantly apply configs: invalidate cache and kill currently running instances
+    # so the pool immediately spawns new ones with the fresh config.
+    config_service.invalidate(agent_id)
+    # The default agent might be running as generic (agent_id=None), so recycle both
+    await agent_pool.recycle_agents(agent_id)
+    if agent_id == "default":
+        await agent_pool.recycle_agents(None)
+        
     return agent
 
 
