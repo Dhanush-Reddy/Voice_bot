@@ -20,7 +20,7 @@ from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
-from pipecat.frames.frames import Frame, TextFrame, TranscriptionFrame
+from pipecat.frames.frames import Frame, TextFrame, TranscriptionFrame, InputTextRawFrame
 
 from pipecat.services.google import GeminiLiveLLMService, GeminiLiveVertexLLMService
 from pipecat.pipeline.pipeline import Pipeline
@@ -425,7 +425,9 @@ async def create_pipeline(
         for attempt in range(1, 4):
             try:
                 logger.info("🎤 Sending greeting (attempt %d)…", attempt)
-                await gemini_live_service.push_frame(TextFrame(text=first_message))
+                # We prompt the Gemini Live model to *say* the greeting since there is no separate TTS
+                prompt = f"Please introduce yourself by saying exactly: {first_message}"
+                await gemini_live_service.push_frame(InputTextRawFrame(text=prompt))
                 logger.info("✅ Greeting sent on attempt %d", attempt)
                 break
             except Exception as exc:
