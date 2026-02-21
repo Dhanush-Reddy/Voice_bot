@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import asyncio
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
@@ -23,7 +23,7 @@ from models.agent import (
     AgentUpdateRequest,
     TokenResponse,
 )
-from models.call_log import CallLog, LiveKitWebhookPayload
+from models.call_log import CallLog, LiveKitWebhookPayload, CallLogCreateRequest
 from models.knowledge import KnowledgeDocument, KnowledgeSearchResult
 from services.agent_service import agent_service
 from services.call_log_service import call_log_service
@@ -99,6 +99,7 @@ async def generate_token(
     agent_id: Optional[str] = Query(
         None, description="Agent UUID (uses default if omitted)"
     ),
+    x_user_id: Optional[str] = Header(None, alias="x-user-id"),
 ):
     """
     Pop a pre-warmed agent from the pool and return a token for the user.
@@ -113,7 +114,7 @@ async def generate_token(
 
         # Validate agent exists if specified
         if agent_id:
-            agent = await agent_service.get_agent(agent_id)
+            agent = await agent_service.get_agent(agent_id, user_id=x_user_id)
             if not agent:
                 raise HTTPException(
                     status_code=404, detail=f"Agent '{agent_id}' not found."
@@ -132,6 +133,22 @@ async def generate_token(
                 status_code=503,
                 detail="No agents available. Please try again in a moment.",
             )
+
+        # Create placeholder CallLog so runner.py can find it and update with transcript
+        try:
+            await call_log_service.create_call_log(
+                CallLogCreateRequest(
+                    room_name=pool_agent.room_name,
+                    agent_id=agent.id,
+                    duration_seconds=0,
+                    status="started",
+                    participant_count=1,
+                    user_id=x_user_id
+                ),
+                user_id=x_user_id
+            )
+        except Exception as e:
+            logger.error("❌ Failed to pre-create CallLog: %s", e)
 
         # Generate a token for the user to join the agent's pre-warmed room
         token = agent_pool.generate_user_token(pool_agent.room_name, participant_name)
@@ -161,48 +178,39 @@ async def generate_token(
 # Agent CRUD endpoints
 # ---------------------------------------------------------------------------
 @app.get("/api/agents", response_model=List[AgentConfig])
-async def list_agents():
+async def list_agents(x_user_id: Optional[str] = Header(None, alias="x-user-id")):
     """Return all configured agents."""
-    return await agent_service.list_agents()
+    return await agent_service.list_agents(user_id=x_user_id)
 
 
 @app.get("/api/agents/{agent_id}", response_model=AgentConfig)
-async def get_agent(agent_id: str):
+async def get_agent(agent_id: str, x_user_id: Optional[str] = Header(None, alias="x-user-id")):
     """Return a single agent by ID."""
-    agent = await agent_service.get_agent(agent_id)
+    agent = await agent_service.get_agent(agent_id, user_id=x_user_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found.")
     return agent
 
 
 @app.post("/api/agents", response_model=AgentConfig, status_code=201)
-async def create_agent(request: AgentCreateRequest):
+async def create_agent(request: AgentCreateRequest, x_user_id: Optional[str] = Header(None, alias="x-user-id")):
     """Create a new agent configuration."""
-    return await agent_service.create_agent(request)
+    return await agent_service.create_agent(request, user_id=x_user_id)
 
 
 @app.patch("/api/agents/{agent_id}", response_model=AgentConfig)
-async def update_agent(agent_id: str, request: AgentUpdateRequest):
+async def update_agent(agent_id: str, request: AgentUpdateRequest, x_user_id: Optional[str] = Header(None, alias="x-user-id")):
     """Update an existing agent's configuration (partial update)."""
-    agent = await agent_service.update_agent(agent_id, request)
+    agent = await agent_service.update_agent(agent_id, request, user_id=x_user_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found.")
-        
-    # Instantly apply configs: invalidate cache and kill currently running instances
-    # so the pool immediately spawns new ones with the fresh config.
-    config_service.invalidate(agent_id)
-    # The default agent might be running as generic (agent_id=None), so recycle both
-    await agent_pool.recycle_agents(agent_id)
-    if agent_id == "default":
-        await agent_pool.recycle_agents(None)
-        
     return agent
 
 
 @app.delete("/api/agents/{agent_id}", status_code=204)
-async def delete_agent(agent_id: str):
+async def delete_agent(agent_id: str, x_user_id: Optional[str] = Header(None, alias="x-user-id")):
     """Delete an agent configuration."""
-    deleted = await agent_service.delete_agent(agent_id)
+    deleted = await agent_service.delete_agent(agent_id, user_id=x_user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Agent not found.")
 
@@ -220,26 +228,27 @@ async def list_calls(
         None, description="Filter by outcome: success, not_interested, etc."
     ),
     limit: int = Query(100, le=500),
+    x_user_id: Optional[str] = Header(None, alias="x-user-id"),
 ):
     """Return call history with optional filters."""
     return await call_log_service.list_calls(
-        agent_id=agent_id, status=status, outcome=outcome, limit=limit
+        agent_id=agent_id, status=status, outcome=outcome, limit=limit, user_id=x_user_id
     )
 
 
 @app.get("/api/calls/{call_id}", response_model=CallLog)
-async def get_call(call_id: str):
+async def get_call(call_id: str, x_user_id: Optional[str] = Header(None, alias="x-user-id")):
     """Return a single call record with its full transcript."""
-    call = await call_log_service.get_call(call_id)
+    call = await call_log_service.get_call(call_id, user_id=x_user_id)
     if not call:
         raise HTTPException(status_code=404, detail="Call not found.")
     return call
 
 
 @app.delete("/api/calls/{call_id}", status_code=204)
-async def delete_call(call_id: str):
+async def delete_call(call_id: str, x_user_id: Optional[str] = Header(None, alias="x-user-id")):
     """Delete a call log record."""
-    deleted = await call_log_service.delete_call(call_id)
+    deleted = await call_log_service.delete_call(call_id, user_id=x_user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Call not found.")
 

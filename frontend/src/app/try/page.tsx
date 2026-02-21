@@ -10,7 +10,7 @@ const VoiceAssistant = dynamic(() => import("@/components/VoiceAssistant"), {
     loading: () => <div className="animate-pulse text-slate-400">Loading Assistant...</div>
 });
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+const BACKEND_URL = "/api/backend";
 
 function TryNowContent() {
     const searchParams = useSearchParams();
@@ -32,8 +32,8 @@ function TryNowContent() {
         const prefetch = async () => {
             try {
                 const url = agentId
-                    ? `${BACKEND_URL}/api/token?participant_name=User&agent_id=${agentId}`
-                    : `${BACKEND_URL}/api/token?participant_name=User`;
+                    ? `${BACKEND_URL}/token?participant_name=User&agent_id=${agentId}`
+                    : `${BACKEND_URL}/token?participant_name=User`;
 
                 const res = await fetch(url, { signal: controller.signal });
                 clearTimeout(timeoutId);

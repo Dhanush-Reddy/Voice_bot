@@ -12,7 +12,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+const BACKEND_URL = "/api/backend";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -194,7 +194,7 @@ export default function CallHistoryPage() {
             const params = new URLSearchParams();
             if (statusFilter) params.set("status", statusFilter);
             if (outcomeFilter) params.set("outcome", outcomeFilter);
-            const res = await fetch(`${BACKEND_URL}/api/calls?${params}`);
+            const res = await fetch(`${BACKEND_URL}/calls?${params}`);
             if (!res.ok) throw new Error("Failed to load calls");
             setCalls(await res.json());
         } catch {
@@ -212,7 +212,7 @@ export default function CallHistoryPage() {
         if (!confirm("Delete this call log? This cannot be undone.")) return;
         setDeletingId(callId);
         try {
-            await fetch(`${BACKEND_URL}/api/calls/${callId}`, { method: "DELETE" });
+            await fetch(`${BACKEND_URL}/calls/${callId}`, { method: "DELETE" });
             setCalls((prev) => prev.filter((c) => c.id !== callId));
             if (selectedCall?.id === callId) setSelectedCall(null);
         } catch {
@@ -225,7 +225,7 @@ export default function CallHistoryPage() {
     const handleRowClick = async (call: CallLog) => {
         // Fetch full call (with transcript) on click
         try {
-            const res = await fetch(`${BACKEND_URL}/api/calls/${call.id}`);
+            const res = await fetch(`${BACKEND_URL}/calls/${call.id}`);
             if (res.ok) setSelectedCall(await res.json());
             else setSelectedCall(call);
         } catch {

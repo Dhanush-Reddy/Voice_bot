@@ -14,7 +14,7 @@
 
 import { useEffect, useState } from "react";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+const BACKEND_URL = "/api/backend";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -149,7 +149,7 @@ export default function AnalyticsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetch(`${BACKEND_URL}/api/calls?limit=500`)
+        fetch(`${BACKEND_URL}/calls?limit=500`)
             .then((r) => r.json())
             .then(setCalls)
             .catch(() => { })

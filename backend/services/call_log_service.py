@@ -97,11 +97,11 @@ class CallLogService:
             logger.error(f"❌ AI Intelligence generation failed: {e}")
             return None, None
 
-    async def create_call_log(self, request: CallLogCreateRequest, db: Optional[AsyncSession] = None) -> CallLog:
+    async def create_call_log(self, request: CallLogCreateRequest, user_id: Optional[str] = None, db: Optional[AsyncSession] = None) -> CallLog:
         """Persist a new call record after a call ends, enriched with AI intelligence."""
         if db is None:
             async with AsyncSessionLocal() as session:
-                return await self.create_call_log(request, session)
+                return await self.create_call_log(request, user_id, session)
 
         # Generate AI summary and outcome if transcript is available
         ai_summary = None
@@ -112,8 +112,37 @@ class CallLogService:
             if detected_outcome:
                 ai_outcome = detected_outcome
 
+        # Use request.user_id if provided, otherwise fallback to user_id param
+        final_user_id = request.user_id or user_id
+
+        # Check if a CallLog already exists for this room (pre-created by /api/token)
+        result = await db.execute(select(CallLogModel).where(CallLogModel.room_name == request.room_name).order_by(CallLogModel.created_at.desc()))
+        existing = result.scalars().first()
+
+        if existing:
+            # Update existing record
+            existing.status = request.status
+            existing.outcome = ai_outcome
+            existing.duration_seconds = request.duration_seconds
+            existing.participant_count = request.participant_count
+            existing.transcript = request.transcript
+            existing.summary = ai_summary
+            existing.recording_url = request.recording_url
+            if hasattr(request, "agent_id") and request.agent_id:
+                existing.agent_id = request.agent_id
+            if request.metadata:
+                existing.call_metadata = request.metadata
+            if final_user_id and not existing.user_id:
+                existing.user_id = final_user_id
+
+            await db.commit()
+            await db.refresh(existing)
+            logger.info("📞 Call log updated in DB: %s (room=%s, outcome=%s)", existing.id, existing.room_name, ai_outcome)
+            return self._to_pydantic(existing)
+
         model = CallLogModel(
             id=str(uuid.uuid4()),
+            user_id=final_user_id,
             agent_id=request.agent_id,
             room_name=request.room_name,
             status=request.status,
@@ -170,19 +199,22 @@ class CallLogService:
     async def list_calls(
         self,
         agent_id: Optional[str] = None,
-        status: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         outcome: Optional[str] = None,
         limit: int = 100,
+        user_id: Optional[str] = None,
         db: Optional[AsyncSession] = None
     ) -> List[CallLog]:
         """Return call logs with optional filters from the database."""
         if db is None:
             async with AsyncSessionLocal() as session:
-                return await self.list_calls(agent_id, status, outcome, limit, session)
+                return await self.list_calls(agent_id, status, outcome, limit, user_id, session)
 
         # Join with Agent to get agent_name
         query = select(CallLogModel, AgentModel.name).join(AgentModel, CallLogModel.agent_id == AgentModel.id, isouter=True)
         
+        if user_id:
+            query = query.where(CallLogModel.user_id == user_id)
         if agent_id:
             query = query.where(CallLogModel.agent_id == agent_id)
         if status:
@@ -197,25 +229,32 @@ class CallLogService:
         
         return [self._to_pydantic(row.CallLog, row.name) for row in rows]
 
-    async def get_call(self, call_id: str, db: Optional[AsyncSession] = None) -> Optional[CallLog]:
+    async def get_call(self, call_id: str, user_id: Optional[str] = None, db: Optional[AsyncSession] = None) -> Optional[CallLog]:
         """Fetch a single call record by ID."""
         if db is None:
             async with AsyncSessionLocal() as session:
-                return await self.get_call(call_id, session)
+                return await self.get_call(call_id, user_id, session)
 
         query = select(CallLogModel, AgentModel.name).join(AgentModel, CallLogModel.agent_id == AgentModel.id, isouter=True).where(CallLogModel.id == call_id)
+        if user_id:
+            query = query.where(CallLogModel.user_id == user_id)
+
         result = await db.execute(query)
         row = result.first()
         
         return self._to_pydantic(row.CallLog, row.name) if row else None
 
-    async def delete_call(self, call_id: str, db: Optional[AsyncSession] = None) -> bool:
+    async def delete_call(self, call_id: str, user_id: Optional[str] = None, db: Optional[AsyncSession] = None) -> bool:
         """Delete a call log from the database."""
         if db is None:
             async with AsyncSessionLocal() as session:
-                return await self.delete_call(call_id, session)
+                return await self.delete_call(call_id, user_id, session)
 
-        result = await db.execute(select(CallLogModel).where(CallLogModel.id == call_id))
+        query = select(CallLogModel).where(CallLogModel.id == call_id)
+        if user_id:
+            query = query.where(CallLogModel.user_id == user_id)
+
+        result = await db.execute(query)
         model = result.scalar_one_or_none()
         if not model:
             return False

@@ -41,19 +41,23 @@ class AgentService:
             first_message=model.first_message,
         )
 
-    async def get_agent(self, agent_id: str, db: Optional[AsyncSession] = None) -> Optional[AgentConfig]:
+    async def get_agent(self, agent_id: str, user_id: Optional[str] = None, db: Optional[AsyncSession] = None) -> Optional[AgentConfig]:
         """Fetch a single agent by ID. Returns None if not found."""
         if db is None:
             async with AsyncSessionLocal() as session:
-                return await self.get_agent(agent_id, session)
+                return await self.get_agent(agent_id, user_id, session)
 
-        result = await db.execute(select(AgentModel).where(AgentModel.id == agent_id))
+        query = select(AgentModel).where(AgentModel.id == agent_id)
+        if user_id:
+            query = query.where((AgentModel.user_id == user_id) | (AgentModel.id == "default"))
+
+        result = await db.execute(query)
         model = result.scalar_one_or_none()
         return self._to_pydantic(model) if model else None
 
     async def get_default_agent(self, db: Optional[AsyncSession] = None) -> AgentConfig:
         """Return the default agent config. Seeds it if missing."""
-        agent = await self.get_agent("default", db)
+        agent = await self.get_agent("default", db=db)
         if not agent:
             # Seed default agent if not exists
             agent = await self.seed_default_agent(db)
@@ -66,7 +70,7 @@ class AgentService:
                 return await self.seed_default_agent(session)
 
         # Check if "default" exists
-        existing = await self.get_agent("default", db)
+        existing = await self.get_agent("default", db=db)
         if existing:
             return existing
 
@@ -88,24 +92,29 @@ class AgentService:
         await db.refresh(default_model)
         return self._to_pydantic(default_model)
 
-    async def list_agents(self, db: Optional[AsyncSession] = None) -> List[AgentConfig]:
+    async def list_agents(self, user_id: Optional[str] = None, db: Optional[AsyncSession] = None) -> List[AgentConfig]:
         """Return all agents in the database."""
         if db is None:
             async with AsyncSessionLocal() as session:
-                return await self.list_agents(session)
+                return await self.list_agents(user_id, session)
 
-        result = await db.execute(select(AgentModel).order_by(AgentModel.created_at.desc()))
+        query = select(AgentModel)
+        if user_id:
+            query = query.where((AgentModel.user_id == user_id) | (AgentModel.user_id.is_(None)))
+
+        result = await db.execute(query.order_by(AgentModel.created_at.desc()))
         models = result.scalars().all()
         return [self._to_pydantic(m) for m in models]
 
-    async def create_agent(self, request: AgentCreateRequest, db: Optional[AsyncSession] = None) -> AgentConfig:
+    async def create_agent(self, request: AgentCreateRequest, user_id: Optional[str] = None, db: Optional[AsyncSession] = None) -> AgentConfig:
         """Create a new agent and persist it to the database."""
         if db is None:
             async with AsyncSessionLocal() as session:
-                return await self.create_agent(request, session)
+                return await self.create_agent(request, user_id, session)
 
         model = AgentModel(
             id=str(uuid.uuid4()),
+            user_id=user_id,
             name=request.name,
             system_prompt=request.system_prompt,
             voice_id=request.voice_id or "Aoede",
@@ -123,14 +132,18 @@ class AgentService:
         return self._to_pydantic(model)
 
     async def update_agent(
-        self, agent_id: str, request: AgentUpdateRequest, db: Optional[AsyncSession] = None
+        self, agent_id: str, request: AgentUpdateRequest, user_id: Optional[str] = None, db: Optional[AsyncSession] = None
     ) -> Optional[AgentConfig]:
         """Update an existing agent's configuration in the database."""
         if db is None:
             async with AsyncSessionLocal() as session:
-                return await self.update_agent(agent_id, request, session)
+                return await self.update_agent(agent_id, request, user_id, session)
 
-        result = await db.execute(select(AgentModel).where(AgentModel.id == agent_id))
+        query = select(AgentModel).where(AgentModel.id == agent_id)
+        if user_id:
+            query = query.where(AgentModel.user_id == user_id)
+            
+        result = await db.execute(query)
         model = result.scalar_one_or_none()
         if not model:
             return None
@@ -145,13 +158,20 @@ class AgentService:
         logger.info("✏️ Updated agent in DB: %s", agent_id)
         return self._to_pydantic(model)
 
-    async def delete_agent(self, agent_id: str, db: Optional[AsyncSession] = None) -> bool:
+    async def delete_agent(self, agent_id: str, user_id: Optional[str] = None, db: Optional[AsyncSession] = None) -> bool:
         """Delete an agent from the database."""
         if db is None:
             async with AsyncSessionLocal() as session:
-                return await self.delete_agent(agent_id, session)
+                return await self.delete_agent(agent_id, user_id, session)
 
-        result = await db.execute(select(AgentModel).where(AgentModel.id == agent_id))
+        if agent_id == "default":
+            return False
+
+        query = select(AgentModel).where(AgentModel.id == agent_id)
+        if user_id:
+            query = query.where(AgentModel.user_id == user_id)
+
+        result = await db.execute(query)
         model = result.scalar_one_or_none()
         if not model:
             return False

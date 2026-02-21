@@ -10,7 +10,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+const BACKEND_URL = "/api/backend";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,7 +72,7 @@ export default function KnowledgePage() {
 
     // Load agents
     useEffect(() => {
-        fetch(`${BACKEND_URL}/api/agents`)
+        fetch(`${BACKEND_URL}/agents`)
             .then((r) => r.json())
             .then((data) => {
                 setAgents(data);
@@ -86,7 +86,7 @@ export default function KnowledgePage() {
         if (!selectedAgentId) return;
         setLoading(true);
         try {
-            const res = await fetch(`${BACKEND_URL}/api/agents/${selectedAgentId}/knowledge`);
+            const res = await fetch(`${BACKEND_URL}/agents/${selectedAgentId}/knowledge`);
             if (res.ok) setDocuments(await res.json());
         } catch {
             // silent
@@ -109,7 +109,7 @@ export default function KnowledgePage() {
         form.append("file", file);
 
         try {
-            const res = await fetch(`${BACKEND_URL}/api/agents/${selectedAgentId}/knowledge`, {
+            const res = await fetch(`${BACKEND_URL}/agents/${selectedAgentId}/knowledge`, {
                 method: "POST",
                 body: form,
             });
@@ -145,7 +145,7 @@ export default function KnowledgePage() {
         if (!confirm("Delete this document? This cannot be undone.")) return;
         setDeletingId(docId);
         try {
-            await fetch(`${BACKEND_URL}/api/knowledge/${docId}`, { method: "DELETE" });
+            await fetch(`${BACKEND_URL}/knowledge/${docId}`, { method: "DELETE" });
             setDocuments((prev) => prev.filter((d) => d.id !== docId));
         } catch {
             alert("Failed to delete document.");

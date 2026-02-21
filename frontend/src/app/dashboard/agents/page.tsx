@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+const BACKEND_URL = "/api/backend";
 
 interface Agent {
     id: string;
@@ -86,7 +86,7 @@ export default function AgentsPage() {
     useEffect(() => {
         const fetchAgents = async () => {
             try {
-                const res = await fetch(`${BACKEND_URL}/api/agents`);
+                const res = await fetch(`${BACKEND_URL}/agents`);
                 if (!res.ok) throw new Error("Failed to load agents");
                 setAgents(await res.json());
             } catch {

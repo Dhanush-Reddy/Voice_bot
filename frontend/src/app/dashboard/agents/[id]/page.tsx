@@ -14,7 +14,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+const BACKEND_URL = "/api/backend";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -157,7 +157,7 @@ export default function AgentEditorPage() {
     useEffect(() => {
         const fetchOptions = async () => {
             try {
-                const res = await fetch(`${BACKEND_URL}/api/config/options`);
+                const res = await fetch(`${BACKEND_URL}/config/options`);
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
                 const data = await res.json();
                 setVoices(data.voices);
@@ -209,7 +209,7 @@ export default function AgentEditorPage() {
         if (isNew) return;
         const fetchAgent = async () => {
             try {
-                const res = await fetch(`${BACKEND_URL}/api/agents/${agentId}`);
+                const res = await fetch(`${BACKEND_URL}/agents/${agentId}`);
                 if (!res.ok) throw new Error("Agent not found");
                 const data = await res.json();
                 setForm({
@@ -276,7 +276,7 @@ export default function AgentEditorPage() {
         setSaving(true);
         setError("");
         try {
-            const url = isNew ? `${BACKEND_URL}/api/agents` : `${BACKEND_URL}/api/agents/${agentId}`;
+            const url = isNew ? `${BACKEND_URL}/agents` : `${BACKEND_URL}/agents/${agentId}`;
             const method = isNew ? "POST" : "PATCH";
             const res = await fetch(url, {
                 method,

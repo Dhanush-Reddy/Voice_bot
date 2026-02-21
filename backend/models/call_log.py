@@ -62,6 +62,7 @@ class CallLogCreateRequest(BaseModel):
     transcript: Optional[List[Any]] = None
     recording_url: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    user_id: Optional[str] = None
 
 
 class LiveKitWebhookPayload(BaseModel):

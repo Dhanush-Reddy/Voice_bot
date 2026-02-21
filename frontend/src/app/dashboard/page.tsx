@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { StatCard } from "@/components/StatCard";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+const BACKEND_URL = "/api/backend";
 
 interface Agent {
     id: string;
@@ -52,9 +52,9 @@ export default function DashboardPage() {
         const fetchAll = async () => {
             try {
                 const [agentsRes, callsRes, healthRes] = await Promise.all([
-                    fetch(`${BACKEND_URL}/api/agents`),
-                    fetch(`${BACKEND_URL}/api/calls?limit=50`),
-                    fetch(`${BACKEND_URL}/api/health`),
+                    fetch(`${BACKEND_URL}/agents`),
+                    fetch(`${BACKEND_URL}/calls?limit=50`),
+                    fetch(`${BACKEND_URL}/health`),
                 ]);
                 if (!agentsRes.ok) throw new Error("backend down");
                 setAgents(await agentsRes.json());

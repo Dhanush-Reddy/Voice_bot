@@ -30,14 +30,14 @@ export const authOptions: NextAuthOptions = {
                     where: { email: credentials.email.toLowerCase().trim() },
                 });
 
-                if (!user || !user.password) {
+                if (!user || !(user as any).password) {
                     // No account or signed up via Google (no password set)
                     throw new Error("Invalid email or password.");
                 }
 
                 const passwordsMatch = await bcrypt.compare(
                     credentials.password,
-                    user.password
+                    (user as any).password
                 );
 
                 if (!passwordsMatch) {
