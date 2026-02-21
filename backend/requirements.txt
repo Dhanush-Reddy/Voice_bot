@@ -9,4 +9,5 @@ python-multipart>=0.0.9
 pypdf>=4.0.0
 google-generativeai>=0.8.0
 sqlalchemy[asyncio]>=2.0.0
-aiosqlite>=0.20.0
+asyncpg
+cloud-sql-python-connector[asyncpg]>=1.0.0

@@ -60,7 +60,13 @@ class Settings:
         # ── App ───────────────────────────────────────────────────────────────
         self.default_bot_voice: str = os.getenv("DEFAULT_BOT_VOICE", "Aoede")
         self.default_bot_model: str = os.getenv("DEFAULT_BOT_MODEL", "gemini-2.0-flash-live-001")
-        self.database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./voice_bot.db")
+        
+        # ── Database (Cloud SQL) ──────────────────────────────────────────────
+        self.cloud_sql_connection_name: str = os.getenv("CLOUD_SQL_CONNECTION_NAME", "gen-lang-client-0133143947:us-central1:voice-ai-db-prod")
+        self.db_user: str = os.getenv("DB_USER", "voice_admin")
+        self.db_pass: str = os.getenv("DB_PASS", "voice_admin_secure_123!")
+        self.db_name: str = os.getenv("DB_NAME", "voice_bot")
+        
         try:
             self.agent_pool_size: int = int(os.getenv("AGENT_POOL_SIZE", "3"))
         except ValueError:

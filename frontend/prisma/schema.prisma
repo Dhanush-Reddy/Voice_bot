@@ -1,0 +1,114 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// --- NextAuth Models ---
+
+model User {
+    id            String    @id @default(uuid()) @db.VarChar(36)
+    name          String?   @db.VarChar(255)
+    email         String?   @unique @db.VarChar(255)
+    emailVerified DateTime?
+    image         String?   @db.Text
+    password      String?   @db.Text
+    phone         String?   @db.VarChar(30)
+    company       String?   @db.VarChar(100)
+
+    accounts Account[]
+    sessions Session[]
+    agents   Agent[]
+
+    @@map("users")
+}
+
+model Account {
+    id                String  @id @default(uuid()) @db.VarChar(36)
+    userId            String  @db.VarChar(36)
+    type              String  @db.VarChar(255)
+    provider          String  @db.VarChar(255)
+    providerAccountId String  @db.VarChar(255)
+    refresh_token     String? @db.Text
+    access_token      String? @db.Text
+    expires_at        Int?
+    token_type        String? @db.VarChar(255)
+    scope             String? @db.VarChar(255)
+    id_token          String? @db.Text
+    session_state     String? @db.VarChar(255)
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@unique([provider, providerAccountId])
+    @@map("accounts")
+}
+
+model Session {
+    id           String   @id @default(uuid()) @db.VarChar(36)
+    sessionToken String   @unique @db.VarChar(255)
+    userId       String   @db.VarChar(36)
+    expires      DateTime
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@map("sessions")
+}
+
+model VerificationToken {
+    identifier String   @db.VarChar(255)
+    token      String   @unique @db.VarChar(255)
+    expires    DateTime
+
+    @@unique([identifier, token])
+    @@map("verification_tokens")
+}
+
+// --- Application Core Models ---
+
+model Agent {
+    id               String   @id @default(uuid()) @db.VarChar(36)
+    user_id          String?  @db.VarChar(36)
+    name             String   @db.VarChar(100)
+    system_prompt    String   @db.VarChar(4000)
+    voice_id         String   @default("Aoede") @db.VarChar(50)
+    model            String   @default("gemini-2.0-flash-live-001") @db.VarChar(100)
+    language         String   @default("en-US") @db.VarChar(10)
+    vad_min_volume   Float    @default(0.15)
+    is_active        Boolean  @default(true)
+    temperature      Float    @default(0.7)
+    success_outcomes Json     @default("[]")
+    handoff_number   String?  @db.VarChar(20)
+    first_message    String?  @db.VarChar(500)
+    created_at       DateTime @default(now())
+    updated_at       DateTime @updatedAt
+
+    user  User?     @relation(fields: [user_id], references: [id], onDelete: SetNull)
+    calls CallLog[]
+
+    @@map("agents")
+}
+
+model CallLog {
+    id                String   @id @default(uuid()) @db.VarChar(36)
+    agent_id          String   @db.VarChar(36)
+    user_id           String   @db.VarChar(36)
+    room_name         String   @db.VarChar(100)
+    participant_name  String?  @db.VarChar(100)
+    status            String   @default("connected") @db.VarChar(50)
+    outcome           String?  @db.VarChar(50)
+    duration_seconds  Int      @default(0)
+    participant_count Int      @default(1)
+    transcript        Json?
+    summary           String?  @db.VarChar(2000)
+    recording_url     String?  @db.VarChar(500)
+    outcome_tags      Json     @default("[]")
+    call_metadata     Json?
+    created_at        DateTime @default(now())
+
+    agent Agent @relation(fields: [agent_id], references: [id], onDelete: Cascade)
+
+    @@map("call_logs")
+}

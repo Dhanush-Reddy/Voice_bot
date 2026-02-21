@@ -9,6 +9,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 
 interface NavItem {
     label: string;
@@ -81,6 +82,7 @@ const NAV_SECTIONS: NavSection[] = [
 
 export function DashboardSidebar() {
     const pathname = usePathname();
+    const { data: session } = useSession();
 
     const isActive = (href: string) => {
         if (href === "/dashboard") return pathname === "/dashboard";
@@ -132,8 +134,8 @@ export function DashboardSidebar() {
                 ))}
             </nav>
 
-            {/* Footer — link back to the voice widget */}
-            <div className="px-3 py-4 border-t border-white/5">
+            {/* Footer — link back to the voice widget and Sign Out */}
+            <div className="px-3 py-4 border-t border-white/5 flex flex-col gap-2">
                 <Link
                     href="/"
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
@@ -141,6 +143,33 @@ export function DashboardSidebar() {
                     <MicIcon />
                     Voice Widget
                 </Link>
+
+                {session?.user && (
+                    <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between px-2">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                            {session.user.image ? (
+                                <img src={session.user.image} alt="Avatar" className="w-8 h-8 rounded-full bg-slate-800" />
+                            ) : (
+                                <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white">
+                                    {session.user.name?.charAt(0) || "U"}
+                                </div>
+                            )}
+                            <div className="flex flex-col truncate">
+                                <span className="text-xs font-medium text-slate-200 truncate">{session.user.name}</span>
+                                <span className="text-[10px] text-slate-500 truncate">{session.user.email}</span>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => signOut({ callbackUrl: '/' })}
+                            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all ml-2"
+                            title="Sign Out"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                            </svg>
+                        </button>
+                    </div>
+                )}
             </div>
         </aside>
     );

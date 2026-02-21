@@ -2,7 +2,7 @@ steps:
   # --- BACKEND ---
   # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/voice-backend:$COMMIT_SHA', '-f', 'backend/Dockerfile.backend', './backend']
+    args: ['build', '--no-cache', '-t', 'gcr.io/$PROJECT_ID/voice-backend:$COMMIT_SHA', '-f', 'backend/Dockerfile.backend', './backend']
 
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
@@ -29,8 +29,10 @@ steps:
       - '--memory'
       - '8Gi'
       - '--no-cpu-throttling'
-      - '--set-env-vars'
-      - 'LIVEKIT_URL=${_LIVEKIT_URL},LIVEKIT_API_KEY=${_LIVEKIT_API_KEY},LIVEKIT_API_SECRET=${_LIVEKIT_API_SECRET},GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GOOGLE_APPLICATION_CREDENTIALS_JSON=${_GOOGLE_APPLICATION_CREDENTIALS_JSON},GEMINI_API_KEY=${_GEMINI_API_KEY}'
+      - '--update-env-vars'
+      - 'LIVEKIT_URL=${_LIVEKIT_URL},LIVEKIT_API_KEY=${_LIVEKIT_API_KEY},LIVEKIT_API_SECRET=${_LIVEKIT_API_SECRET},GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,CLOUD_SQL_CONNECTION_NAME=gen-lang-client-0133143947:us-central1:voice-ai-db-prod,DB_USER=voice_admin,DB_PASS=voice_admin_secure_123!,DB_NAME=voice_bot'
+      - '--add-cloudsql-instances'
+      - 'gen-lang-client-0133143947:us-central1:voice-ai-db-prod'
 
   # --- FRONTEND ---
   # Build the container image
@@ -61,6 +63,10 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
+      - '--update-env-vars'
+      - 'DATABASE_URL=${_DATABASE_URL},NEXTAUTH_URL=${_NEXTAUTH_URL},NEXTAUTH_SECRET=${_NEXTAUTH_SECRET},GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID},GOOGLE_CLIENT_SECRET=${_GOOGLE_CLIENT_SECRET}'
+      - '--add-cloudsql-instances'
+      - 'gen-lang-client-0133143947:us-central1:voice-ai-db-prod'
 
 images:
   - 'gcr.io/$PROJECT_ID/voice-backend:$COMMIT_SHA'
@@ -70,8 +76,11 @@ substitutions:
   _LIVEKIT_URL: 'wss://voice-agent-xxxx.livekit.cloud'
   _LIVEKIT_API_KEY: 'APIxxxx'
   _LIVEKIT_API_SECRET: 'SGxxxx'
-  _GOOGLE_APPLICATION_CREDENTIALS_JSON: '{}'
-  _GEMINI_API_KEY: ''
+  _DATABASE_URL: 'postgresql://voice_admin:voice_admin_secure_123!@localhost/voice_bot?host=/cloudsql/gen-lang-client-0133143947:us-central1:voice-ai-db-prod'
+  _NEXTAUTH_URL: 'https://voice-frontend-820513756722.us-central1.run.app'
+  _NEXTAUTH_SECRET: 'super_secret_production_key_1234'
+  _GOOGLE_CLIENT_ID: ''
+  _GOOGLE_CLIENT_SECRET: ''
 
 options:
   logging: CLOUD_LOGGING_ONLY
