@@ -49,7 +49,7 @@ if LIVEKIT_URL:
 MAX_RETRY_ATTEMPTS = 3
 RETRY_DELAY = 2.0  # seconds
 GEMINI_TIMEOUT = 30.0  # seconds
-STARTUP_GRACE_PERIOD = 0.2  # seconds
+STARTUP_GRACE_PERIOD = 2.0  # seconds (increased from 0.2s so user stream opens first)
 
 # ---------------------------------------------------------------------------
 # Default fallback prompt — used only when no AgentConfig is found
@@ -390,8 +390,8 @@ async def create_pipeline(
     # ── Greeting on participant join ─────────────────────────────────────────
     greeting_sent = False
 
-    @transport.event_handler("on_participant_connected")
-    async def on_user_joined(transport: LiveKitTransport, participant: object) -> None:
+    @transport.event_handler("on_first_participant_joined")
+    async def on_first_participant_joined(transport: LiveKitTransport, participant: object) -> None:
         nonlocal greeting_sent
 
         try:
@@ -403,7 +403,7 @@ async def create_pipeline(
         except Exception:
             identity = str(participant)
 
-        logger.info("[GREETING] Participant connected: %s", identity)
+        logger.info("[GREETING] First participant joined: %s", identity)
 
         # Skip bot's own connection event
         if identity == bot_name:
