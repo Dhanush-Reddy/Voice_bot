@@ -58,6 +58,8 @@ class Settings:
         )
 
         # ── App ───────────────────────────────────────────────────────────────
+        self.default_bot_voice: str = os.getenv("DEFAULT_BOT_VOICE", "Aoede")
+        self.default_bot_model: str = os.getenv("DEFAULT_BOT_MODEL", "gemini-2.0-flash-live-001")
         self.database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./voice_bot.db")
         try:
             self.agent_pool_size: int = int(os.getenv("AGENT_POOL_SIZE", "3"))
