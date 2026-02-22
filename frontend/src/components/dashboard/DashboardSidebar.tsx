@@ -10,6 +10,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
+import { useState } from "react";
 
 interface NavItem {
     label: string;
@@ -83,6 +84,7 @@ const NAV_SECTIONS: NavSection[] = [
 export function DashboardSidebar() {
     const pathname = usePathname();
     const { data: session } = useSession();
+    const [isOpen, setIsOpen] = useState(false);
 
     const isActive = (href: string) => {
         if (href === "/dashboard") return pathname === "/dashboard";
@@ -90,87 +92,116 @@ export function DashboardSidebar() {
     };
 
     return (
-        <aside className="fixed left-0 top-0 h-full w-64 bg-[#0d0d14] border-r border-white/5 flex flex-col z-40">
-            {/* Logo */}
-            <div className="flex items-center gap-3 px-6 py-5 border-b border-white/5">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg shadow-violet-500/25">
-                    <MicIcon />
-                </div>
-                <div>
+        <>
+            {/* Mobile Header Bar */}
+            <div className="md:hidden fixed top-0 left-0 w-full h-16 bg-[#0d0d14] border-b border-white/5 flex items-center justify-between px-4 z-40">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg shadow-violet-500/25">
+                        <MicIcon />
+                    </div>
                     <span className="text-sm font-bold text-white tracking-wide">Voice AI</span>
-                    <p className="text-[10px] text-slate-500 uppercase tracking-widest">Agency Platform</p>
                 </div>
-            </div>
-
-            {/* Navigation */}
-            <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
-                {NAV_SECTIONS.map((section, sIdx) => (
-                    <div key={sIdx}>
-                        {section.title && (
-                            <p className="px-3 mb-2 text-[10px] font-semibold text-slate-600 uppercase tracking-widest">
-                                {section.title}
-                            </p>
-                        )}
-                        <ul className="space-y-1">
-                            {section.items.map((item) => (
-                                <li key={item.href}>
-                                    <Link
-                                        href={item.href}
-                                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-                                            isActive(item.href)
-                                                ? "bg-violet-500/15 text-violet-300 shadow-sm"
-                                                : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
-                                        }`}
-                                    >
-                                        <span className={isActive(item.href) ? "text-violet-400" : "text-slate-500"}>
-                                            {item.icon}
-                                        </span>
-                                        {item.label}
-                                    </Link>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                ))}
-            </nav>
-
-            {/* Footer — link back to the voice widget and Sign Out */}
-            <div className="px-3 py-4 border-t border-white/5 flex flex-col gap-2">
-                <Link
-                    href="/"
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
+                <button
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                 >
-                    <MicIcon />
-                    Voice Widget
-                </Link>
-
-                {session?.user && (
-                    <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between px-2">
-                        <div className="flex items-center gap-2 overflow-hidden">
-                            {session.user.image ? (
-                                <img src={session.user.image} alt="Avatar" className="w-8 h-8 rounded-full bg-slate-800" />
-                            ) : (
-                                <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white">
-                                    {session.user.name?.charAt(0) || "U"}
-                                </div>
-                            )}
-                            <div className="flex flex-col truncate">
-                                <span className="text-xs font-medium text-slate-200 truncate">{session.user.name}</span>
-                                <span className="text-[10px] text-slate-500 truncate">{session.user.email}</span>
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => signOut({ callbackUrl: '/' })}
-                            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all ml-2"
-                            title="Sign Out"
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-                            </svg>
-                        </button>
-                    </div>
-                )}
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
+                    </svg>
+                </button>
             </div>
+
+            {/* Mobile Backdrop Overlay */}
+            {isOpen && (
+                <div
+                    className="md:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm transition-opacity"
+                    onClick={() => setIsOpen(false)}
+                />
+            )}
+
+            {/* Sidebar */}
+            <aside className={`fixed left-0 top-0 h-full w-64 bg-[#0d0d14] border-r border-white/5 flex flex-col z-50 transform transition-transform duration-300 ease-in-out ${isOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}>
+                {/* Logo */}
+                <div className="flex items-center gap-3 px-6 py-5 border-b border-white/5">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg shadow-violet-500/25">
+                        <MicIcon />
+                    </div>
+                    <div>
+                        <span className="text-sm font-bold text-white tracking-wide">Voice AI</span>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-widest">Agency Platform</p>
+                    </div>
+                </div>
+
+                {/* Navigation */}
+                <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
+                    {NAV_SECTIONS.map((section, sIdx) => (
+                        <div key={sIdx}>
+                            {section.title && (
+                                <p className="px-3 mb-2 text-[10px] font-semibold text-slate-600 uppercase tracking-widest">
+                                    {section.title}
+                                </p>
+                            )}
+                            <ul className="space-y-1">
+                                {section.items.map((item) => (
+                                    <li key={item.href}>
+                                        <Link
+                                            href={item.href}
+                                            onClick={() => setIsOpen(false)}
+                                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${isActive(item.href)
+                                                    ? "bg-violet-500/15 text-violet-300 shadow-sm"
+                                                    : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                                                }`}
+                                        >
+                                            <span className={isActive(item.href) ? "text-violet-400" : "text-slate-500"}>
+                                                {item.icon}
+                                            </span>
+                                            {item.label}
+                                        </Link>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
+                </nav>
+
+                {/* Footer — link back to the voice widget and Sign Out */}
+                <div className="px-3 py-4 border-t border-white/5 flex flex-col gap-2">
+                    <Link
+                        href="/"
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
+                    >
+                        <MicIcon />
+                        Voice Widget
+                    </Link>
+
+                    {session?.user && (
+                        <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between px-2">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                                {session.user.image ? (
+                                    <img src={session.user.image} alt="Avatar" className="w-8 h-8 rounded-full bg-slate-800" />
+                                ) : (
+                                    <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white">
+                                        {session.user.name?.charAt(0) || "U"}
+                                    </div>
+                                )}
+                                <div className="flex flex-col truncate">
+                                    <span className="text-xs font-medium text-slate-200 truncate">{session.user.name}</span>
+                                    <span className="text-[10px] text-slate-500 truncate">{session.user.email}</span>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => signOut({ callbackUrl: '/' })}
+                                className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all ml-2"
+                                title="Sign Out"
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                                </svg>
+                            </button>
+                        </div>
+                    )}
+                </div>
         </aside>
+        </>
     );
 }

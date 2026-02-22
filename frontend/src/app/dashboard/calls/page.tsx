@@ -271,7 +271,7 @@ export default function CallHistoryPage() {
 
             {/* Stat Cards */}
             {!loading && total > 0 && (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {[
                         { label: "Total Calls", value: total, icon: "📞" },
                         { label: "Success Rate", value: `${successRate}%`, icon: "✅" },
@@ -353,8 +353,8 @@ export default function CallHistoryPage() {
                     </p>
                 </div>
             ) : (
-                <div className="rounded-2xl border border-white/5 overflow-hidden">
-                    <table className="w-full text-sm">
+                <div className="rounded-2xl border border-white/5 overflow-hidden overflow-x-auto">
+                    <table className="w-full text-sm min-w-[800px]">
                         <thead>
                             <tr className="border-b border-white/5 bg-white/[0.02]">
                                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Room</th>

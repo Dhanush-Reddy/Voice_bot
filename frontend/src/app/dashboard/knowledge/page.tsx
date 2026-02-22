@@ -182,7 +182,7 @@ export default function KnowledgePage() {
 
             {/* Stats */}
             {documents.length > 0 && (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {[
                         { label: "Documents", value: documents.length, icon: "📄" },
                         { label: "Total Chunks", value: totalChunks, icon: "🧩" },

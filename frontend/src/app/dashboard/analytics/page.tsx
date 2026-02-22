@@ -267,12 +267,12 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Top agents table */}
-            <div className="rounded-2xl bg-white/[0.03] border border-white/5 p-5">
+            <div className="rounded-2xl bg-white/[0.03] border border-white/5 p-5 overflow-x-auto">
                 <h2 className="text-sm font-semibold text-white mb-4">Top Agents by Call Volume</h2>
                 {topAgents.length === 0 ? (
                     <p className="text-sm text-slate-600 text-center py-8">No agent data yet.</p>
                 ) : (
-                    <table className="w-full text-sm">
+                    <table className="w-full text-sm min-w-[600px]">
                         <thead>
                             <tr className="border-b border-white/5">
                                 <th className="text-left pb-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Agent</th>
